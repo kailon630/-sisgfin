@@ -1,0 +1,39 @@
+# Gradle
+.gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# Kotlin
+.kotlin/
+
+# VS Code
+.vscode/
+
+# Mac OS
+.DS_Store
+
+# Dados locais / banco SQLite legado
+data/*.db
+data/*.sqlite
+*.db
+
+# Credenciais locais — nunca versionar
+.sisgfin/
+db.properties
+*.env
+*.secret
+
+# Claude Code (configurações locais do editor)
+.claude/
+
+# Logs
+*.log
+logs/

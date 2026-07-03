@@ -1,0 +1,1166 @@
+openapi: "3.0.3"
+info:
+  title: SisgFin API
+  description: |
+    API REST do Sistema de Gestão Financeira SisgFin.
+
+    ## Autenticação
+    Todos os endpoints (exceto `POST /api/auth/login`) requerem um token JWT no header:
+    ```
+    Authorization: Bearer <token>
+    ```
+    O token é obtido via `POST /api/auth/login` e expira em 24 horas.
+
+    ## Formatos
+    - **Datas e horas**: ISO 8601 — `2026-06-24T14:30:00`
+    - **Datas**: ISO 8601 — `2026-06-24`
+    - **Valores monetários**: string decimal com 2 casas — `"1234.56"`
+
+    ## Tipos de transação (`type`)
+    `INCOME` · `EXPENSE` · `TRANSFER` · `REVERSAL` · `ADJUSTMENT`
+
+    ## Status de transação (`status`)
+    `DRAFT` · `PENDING` · `SCHEDULED` · `OVERDUE` · `PARTIAL` · `PAID` · `CANCELED`
+  version: "1.0.0"
+  contact:
+    name: SisgFin
+    email: kailonbernardo@gmail.com
+
+servers:
+  - url: http://localhost:8080
+    description: Servidor local
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+    description: Autenticação e sessão
+  - name: Transactions
+    description: Lançamentos financeiros (contas a pagar/receber)
+  - name: Accounts
+    description: Contas financeiras e caixas
+  - name: Suppliers
+    description: Fornecedores e credores
+  - name: Categories
+    description: Plano de contas (rubricas)
+  - name: CostCenters
+    description: Centros de custo / projetos
+  - name: CashFlow
+    description: Fluxo de caixa projetado
+  - name: Statement
+    description: Extrato por conta
+
+paths:
+
+  # ── Auth ────────────────────────────────────────────────────────────────────
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Autenticar usuário
+      description: Retorna um token JWT válido por 24 horas.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              username: admin
+              password: admin123
+      responses:
+        '200':
+          description: Autenticado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Dados do usuário autenticado
+      responses:
+        '200':
+          description: Dados do usuário
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ── Transactions ─────────────────────────────────────────────────────────────
+
+  /api/transactions:
+    get:
+      tags: [Transactions]
+      summary: Listar lançamentos
+      parameters:
+        - name: filter
+          in: query
+          description: Filtro rápido (`action_required` | `overdue` | `paid`)
+          schema:
+            type: string
+            enum: [action_required, overdue, paid]
+        - name: status
+          in: query
+          description: Filtrar por status específico
+          schema:
+            $ref: '#/components/schemas/TransactionStatus'
+        - name: type
+          in: query
+          description: Filtrar por tipo
+          schema:
+            $ref: '#/components/schemas/TransactionType'
+      responses:
+        '200':
+          description: Lista de lançamentos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+
+    post:
+      tags: [Transactions]
+      summary: Criar lançamento
+      description: |
+        Cria um lançamento com status `PENDING`. Para parcelamento, informe `installmentTotal`
+        (as parcelas filhas são geradas automaticamente com datas mensais sucessivas).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransactionRequest'
+            example:
+              type: EXPENSE
+              description: "Pagamento fornecedor ABC"
+              amount: "1500.00"
+              issueDate: "2026-06-01T00:00:00"
+              dueDate: "2026-06-30T00:00:00"
+              accountId: 1
+              supplierId: 5
+              categoryId: 12
+              documentType: NF
+              documentNumber: "12345"
+      responses:
+        '201':
+          $ref: '#/components/responses/Created'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/transactions/{id}:
+    get:
+      tags: [Transactions]
+      summary: Buscar lançamento por ID
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Lançamento encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Transactions]
+      summary: Atualizar lançamento
+      description: Apenas lançamentos em status editável (não PAID/CANCELED) podem ser alterados.
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTransactionRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+    delete:
+      tags: [Transactions]
+      summary: Cancelar lançamento
+      description: Cancela o lançamento (soft delete). Status final = `CANCELED`.
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/transactions/{id}/pay:
+    post:
+      tags: [Transactions]
+      summary: Registrar pagamento
+      description: |
+        Registra pagamento total ou parcial. Requer permissão de administrador.
+        - `paidAmount == amount` → status `PAID`
+        - `paidAmount < amount` → status `PARTIAL`
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+            example:
+              paymentDate: "2026-06-24T10:00:00"
+              paidAmount: "1500.00"
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/transactions/{id}/reverse:
+    post:
+      tags: [Transactions]
+      summary: Estornar lançamento
+      description: |
+        Cria um lançamento de estorno (`REVERSAL`) para um lançamento `PAID`.
+        Requer permissão de administrador e justificativa obrigatória (≥10 chars).
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReversalRequest'
+            example:
+              justification: "Pagamento em duplicidade — NF 12345"
+      responses:
+        '201':
+          $ref: '#/components/responses/Created'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/transactions/{id}/timeline:
+    get:
+      tags: [Transactions]
+      summary: Histórico de eventos do lançamento
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Eventos em ordem cronológica
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TimelineEvent'
+
+  # ── Accounts ─────────────────────────────────────────────────────────────────
+
+  /api/accounts:
+    get:
+      tags: [Accounts]
+      summary: Listar contas financeiras
+      responses:
+        '200':
+          description: Lista de contas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Account'
+
+    post:
+      tags: [Accounts]
+      summary: Criar conta financeira
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountRequest'
+            example:
+              name: "Conta Corrente BB"
+              bankName: "Banco do Brasil"
+              agency: "0001"
+              accountNumber: "123456-7"
+              accountType: BANK
+              initialBalance: "5000.00"
+      responses:
+        '201':
+          $ref: '#/components/responses/Created'
+
+  /api/accounts/{id}:
+    get:
+      tags: [Accounts]
+      summary: Buscar conta por ID
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Conta encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Accounts]
+      summary: Atualizar conta
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Accounts]
+      summary: Inativar conta
+      description: Inativa a conta. Bloqueado se o saldo calculado ≠ 0.
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/accounts/{id}/balance:
+    get:
+      tags: [Accounts]
+      summary: Saldo calculado da conta
+      description: |
+        `saldo_inicial + Σreceitas_PAID − Σdespesas_PAID + ajustes + transferências`
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Saldo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceResponse'
+
+  /api/accounts/{id}/statement:
+    get:
+      tags: [Statement]
+      summary: Extrato da conta
+      description: Retorna lançamentos PAID no período com saldo acumulado por linha.
+      parameters:
+        - $ref: '#/components/parameters/id'
+        - name: from
+          in: query
+          description: Data de início (padrão — 1º do mês corrente)
+          schema:
+            type: string
+            format: date
+            example: "2026-06-01"
+        - name: to
+          in: query
+          description: Data de fim (padrão — hoje)
+          schema:
+            type: string
+            format: date
+            example: "2026-06-30"
+      responses:
+        '200':
+          description: Extrato com saldos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatementResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Suppliers ────────────────────────────────────────────────────────────────
+
+  /api/suppliers:
+    get:
+      tags: [Suppliers]
+      summary: Listar fornecedores
+      responses:
+        '200':
+          description: Lista de fornecedores
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Supplier'
+
+    post:
+      tags: [Suppliers]
+      summary: Criar fornecedor
+      description: Valida CPF/CNPJ (dígitos verificadores) e unicidade do documento.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSupplierRequest'
+            example:
+              document: "12.345.678/0001-95"
+              name: "Empresa XYZ Ltda"
+              email: "financeiro@xyz.com.br"
+              pixKey: "12345678000195"
+      responses:
+        '201':
+          $ref: '#/components/responses/Created'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/suppliers/{id}:
+    get:
+      tags: [Suppliers]
+      summary: Buscar fornecedor por ID
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Fornecedor encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Supplier'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Suppliers]
+      summary: Atualizar fornecedor
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSupplierRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+    delete:
+      tags: [Suppliers]
+      summary: Inativar fornecedor
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
+  # ── Categories ───────────────────────────────────────────────────────────────
+
+  /api/categories:
+    get:
+      tags: [Categories]
+      summary: Listar categorias do plano de contas
+      description: Retorna todas as rubricas (~100 itens do padrão TCESP/AUDESP).
+      responses:
+        '200':
+          description: Lista de categorias
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+
+  # ── Cost Centers ─────────────────────────────────────────────────────────────
+
+  /api/cost-centers:
+    get:
+      tags: [CostCenters]
+      summary: Listar centros de custo
+      responses:
+        '200':
+          description: Lista de centros de custo
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CostCenter'
+
+  # ── Cash Flow ────────────────────────────────────────────────────────────────
+
+  /api/cashflow:
+    get:
+      tags: [CashFlow]
+      summary: Projeção de fluxo de caixa
+      description: |
+        Retorna o saldo atual e a projeção dia a dia para os próximos `days` dias.
+        Inclui lançamentos vencidos (OVERDUE) sempre + PENDING/PARTIAL/SCHEDULED até a janela.
+      parameters:
+        - name: accountId
+          in: query
+          description: Filtrar por conta (sem filtro = todas as contas consolidadas)
+          schema:
+            type: integer
+        - name: days
+          in: query
+          description: Janela de projeção em dias (1–90, padrão 14)
+          schema:
+            type: integer
+            default: 14
+            minimum: 1
+            maximum: 90
+      responses:
+        '200':
+          description: Projeção de fluxo de caixa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashFlowProjection'
+
+# ── Components ────────────────────────────────────────────────────────────────
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "Token obtido em POST /api/auth/login"
+
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+
+  responses:
+    Ok:
+      description: Operação concluída
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MessageResponse'
+    Created:
+      description: Recurso criado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/IdResponse'
+    BadRequest:
+      description: Requisição inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Token inválido ou ausente
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnprocessableEntity:
+      description: Regra de negócio violada
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+
+    # ── Enums ────────────────────────────────────────────────────────────────
+
+    TransactionType:
+      type: string
+      enum: [INCOME, EXPENSE, TRANSFER, REVERSAL, ADJUSTMENT]
+      description: |
+        - `INCOME` — Receita
+        - `EXPENSE` — Despesa
+        - `TRANSFER` — Transferência entre contas
+        - `REVERSAL` — Estorno
+        - `ADJUSTMENT` — Ajuste/rendimento de aplicação
+
+    TransactionStatus:
+      type: string
+      enum: [DRAFT, PENDING, SCHEDULED, OVERDUE, PARTIAL, PAID, CANCELED]
+      description: |
+        - `DRAFT` — Rascunho (não entra no fluxo)
+        - `PENDING` — Pendente
+        - `SCHEDULED` — Agendado (data futura)
+        - `OVERDUE` — Vencido (transição automática por `OverdueEngine`)
+        - `PARTIAL` — Parcialmente pago
+        - `PAID` — Quitado
+        - `CANCELED` — Cancelado (estado terminal)
+
+    AccountType:
+      type: string
+      enum: [BANK, CASH, SAVINGS, INVESTMENT]
+
+    # ── Common ───────────────────────────────────────────────────────────────
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    IdResponse:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: integer
+
+    # ── Auth ─────────────────────────────────────────────────────────────────
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+
+    LoginResponse:
+      type: object
+      required: [token, userId, username, role]
+      properties:
+        token:
+          type: string
+          description: JWT — incluir no header Authorization: Bearer <token>
+        userId:
+          type: integer
+        username:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, OPERADOR]
+
+    UserDto:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, OPERADOR]
+        isActive:
+          type: boolean
+
+    # ── Transactions ─────────────────────────────────────────────────────────
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        status:
+          $ref: '#/components/schemas/TransactionStatus'
+        description:
+          type: string
+        amount:
+          type: string
+          example: "1500.00"
+        issueDate:
+          type: string
+          format: date-time
+        dueDate:
+          type: string
+          format: date-time
+        paymentDate:
+          type: string
+          format: date-time
+          nullable: true
+        paidAmount:
+          type: string
+          nullable: true
+        accountId:
+          type: integer
+        supplierId:
+          type: integer
+          nullable: true
+        costCenterId:
+          type: integer
+          nullable: true
+        categoryId:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        documentType:
+          type: string
+          nullable: true
+        documentNumber:
+          type: string
+          nullable: true
+        installmentCurrent:
+          type: integer
+          nullable: true
+        installmentTotal:
+          type: integer
+          nullable: true
+        employeeId:
+          type: integer
+          nullable: true
+        ofxFitId:
+          type: string
+          nullable: true
+        reconciledWithFitId:
+          type: string
+          nullable: true
+
+    CreateTransactionRequest:
+      type: object
+      required: [type, description, amount, issueDate, dueDate, accountId]
+      properties:
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        description:
+          type: string
+        amount:
+          type: string
+          example: "1500.00"
+        issueDate:
+          type: string
+          format: date-time
+        dueDate:
+          type: string
+          format: date-time
+        accountId:
+          type: integer
+        supplierId:
+          type: integer
+          nullable: true
+        costCenterId:
+          type: integer
+          nullable: true
+        categoryId:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        documentType:
+          type: string
+          nullable: true
+        documentNumber:
+          type: string
+          nullable: true
+        installmentTotal:
+          type: integer
+          nullable: true
+          description: Número de parcelas (≥2 gera filhos automáticos)
+
+    UpdateTransactionRequest:
+      type: object
+      required: [description, amount, issueDate, dueDate, accountId]
+      properties:
+        description:
+          type: string
+        amount:
+          type: string
+        issueDate:
+          type: string
+          format: date-time
+        dueDate:
+          type: string
+          format: date-time
+        accountId:
+          type: integer
+        supplierId:
+          type: integer
+          nullable: true
+        costCenterId:
+          type: integer
+          nullable: true
+        categoryId:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        documentType:
+          type: string
+          nullable: true
+        documentNumber:
+          type: string
+          nullable: true
+
+    PaymentRequest:
+      type: object
+      required: [paymentDate, paidAmount]
+      properties:
+        paymentDate:
+          type: string
+          format: date-time
+        paidAmount:
+          type: string
+          example: "1500.00"
+
+    ReversalRequest:
+      type: object
+      required: [justification]
+      properties:
+        justification:
+          type: string
+          minLength: 10
+          description: Motivo do estorno (mínimo 10 caracteres)
+
+    TimelineEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        eventType:
+          type: string
+          enum: [CREATED, UPDATED, STATUS_CHANGED, PAYMENT, PARTIAL_PAYMENT, CANCELED,
+                 DUPLICATED, OVERDUE, WARNING, TRANSFER_OUT, TRANSFER_IN, REVERSED,
+                 REVERSAL_OF, OFX_IMPORT, RECONCILED]
+        message:
+          type: string
+        amount:
+          type: string
+          nullable: true
+        statusFrom:
+          type: string
+          nullable: true
+        statusTo:
+          type: string
+          nullable: true
+        performedBy:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── Accounts ─────────────────────────────────────────────────────────────
+
+    Account:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        bankName:
+          type: string
+          nullable: true
+        agency:
+          type: string
+          nullable: true
+        accountNumber:
+          type: string
+          nullable: true
+        accountType:
+          $ref: '#/components/schemas/AccountType'
+        initialBalance:
+          type: string
+        investmentBroker:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+
+    CreateAccountRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        bankName:
+          type: string
+          nullable: true
+        agency:
+          type: string
+          nullable: true
+        accountNumber:
+          type: string
+          nullable: true
+        accountType:
+          $ref: '#/components/schemas/AccountType'
+        initialBalance:
+          type: string
+          default: "0.00"
+        investmentBroker:
+          type: string
+          nullable: true
+
+    BalanceResponse:
+      type: object
+      properties:
+        accountId:
+          type: integer
+        accountName:
+          type: string
+        balance:
+          type: string
+          example: "12345.67"
+
+    # ── Suppliers ────────────────────────────────────────────────────────────
+
+    Supplier:
+      type: object
+      properties:
+        id:
+          type: integer
+        document:
+          type: string
+          description: CPF ou CNPJ formatado
+        name:
+          type: string
+        tradeName:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        pixKey:
+          type: string
+          nullable: true
+        bank:
+          type: string
+          nullable: true
+        agency:
+          type: string
+          nullable: true
+        account:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+
+    CreateSupplierRequest:
+      type: object
+      required: [document, name]
+      properties:
+        document:
+          type: string
+          description: CPF (XXX.XXX.XXX-XX) ou CNPJ (XX.XXX.XXX/XXXX-XX)
+        name:
+          type: string
+        tradeName:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        pixKey:
+          type: string
+          nullable: true
+        bank:
+          type: string
+          nullable: true
+        agency:
+          type: string
+          nullable: true
+        account:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    # ── Categories ───────────────────────────────────────────────────────────
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+          example: "3.1.1"
+        name:
+          type: string
+        displayName:
+          type: string
+          example: "3.1.1 - Vencimentos e Salários"
+        groupCode:
+          type: string
+          nullable: true
+        groupName:
+          type: string
+          nullable: true
+        isIncome:
+          type: boolean
+        isActive:
+          type: boolean
+
+    # ── Cost Centers ──────────────────────────────────────────────────────────
+
+    CostCenter:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        startDate:
+          type: string
+          format: date-time
+          nullable: true
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+        isActive:
+          type: boolean
+        isEncerrado:
+          type: boolean
+
+    # ── Cash Flow ─────────────────────────────────────────────────────────────
+
+    DailyCashFlow:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        totalOutflow:
+          type: string
+        totalInflow:
+          type: string
+        projectedBalance:
+          type: string
+        transactionCount:
+          type: integer
+
+    CashFlowProjection:
+      type: object
+      properties:
+        currentBalance:
+          type: string
+          description: Saldo atual consolidado
+        overdueTotal:
+          type: string
+          description: Total de lançamentos vencidos
+        totalCommitted:
+          type: string
+          description: Total comprometido na janela (incluindo vencidos)
+        projectedFinalBalance:
+          type: string
+          description: Saldo projetado ao final da janela
+        windowDays:
+          type: integer
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyCashFlow'
+
+    # ── Statement ─────────────────────────────────────────────────────────────
+
+    StatementEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        description:
+          type: string
+        paymentDate:
+          type: string
+          format: date-time
+        amount:
+          type: string
+        runningBalance:
+          type: string
+          description: Saldo acumulado após este lançamento
+        supplierId:
+          type: integer
+          nullable: true
+        categoryId:
+          type: integer
+          nullable: true
+        costCenterId:
+          type: integer
+          nullable: true
+        ofxFitId:
+          type: string
+          nullable: true
+
+    StatementResponse:
+      type: object
+      properties:
+        accountId:
+          type: integer
+        openingBalance:
+          type: string
+          description: Saldo no início do período
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatementEntry'
+        totalInflow:
+          type: string
+        totalOutflow:
+          type: string
+        closingBalance:
+          type: string
+          description: Saldo ao final do período

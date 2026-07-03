@@ -1,0 +1,24 @@
+package br.com.sisgfin
+
+sealed class Screen {
+    object Login : Screen()
+    object Dashboard : Screen()
+    object Balances : Screen()
+    object Statement : Screen()
+    object Accounts : Screen()
+    object Transactions : Screen()
+    object Employees : Screen()
+    object UserManagement : Screen()
+    object Suppliers : Screen()
+    object CostCenters : Screen()
+    object Categories : Screen()
+    object Budget : Screen()
+    object Reports : Screen()
+    object Settings : Screen()
+    object CashFlow : Screen()
+    object OfxImport : Screen()
+    object Recurring : Screen()
+    object Contracts : Screen()
+    object Clients : Screen()
+    object Receivables : Screen()
+}
