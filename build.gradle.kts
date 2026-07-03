@@ -83,10 +83,22 @@ compose.desktop {
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Deb,
             )
             packageName = "SisgFin"
-            packageVersion = "1.0.0"
+            packageVersion = "1.0.1"
             description = "Sistema de Gestão Financeira"
             vendor = "Associação Terapêutica Cannabis Medicinal Flor da Vida"
             copyright = "© 2025 Flor da Vida. Todos os direitos reservados."
+
+            // Módulos Java necessários para o JRE mínimo gerado pelo jlink
+            modules(
+                "java.sql",          // JDBC — sem isso o driver PostgreSQL não carrega
+                "java.naming",       // necessário pelo driver PostgreSQL internamente
+                "java.security.jgss",// Kerberos/GSSAPI (referenciado pelo pg driver)
+                "java.xml",          // Apache POI e PDFBox
+                "java.desktop",      // AWT/Swing base (Compose Desktop precisa)
+                "java.logging",      // java.util.logging usado por Flyway e Ktor
+                "java.management",   // JMX — referenciado por Netty (Ktor)
+                "java.net.http",     // HttpClient usado internamente
+            )
 
             windows {
                 menuGroup = "SisgFin"
