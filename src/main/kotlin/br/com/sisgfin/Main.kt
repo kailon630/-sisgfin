@@ -1,10 +1,13 @@
 package br.com.sisgfin
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -46,6 +49,7 @@ fun main() = application {
         Window(
             onCloseRequest = ::exitApplication,
             title     = "SisgFin",
+            icon      = painterResource("icon.png"),
             resizable = false,
             state     = rememberWindowState(
                 width    = 560.dp,
@@ -104,6 +108,7 @@ fun main() = application {
         Window(
             onCloseRequest = ::exitApplication,
             title = "SisgFin - Finance Workstation",
+            icon  = painterResource("icon.png"),
             state = windowState
         ) {
             val nav = remember { getKoin().get<NavigationState>() }
@@ -208,6 +213,12 @@ private fun AboutDialog(onDismiss: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            Image(
+                painter = painterResource("icon.png"),
+                contentDescription = "SisgFin",
+                modifier = Modifier.size(80.dp),
+                contentScale = ContentScale.Fit
+            )
             Text(
                 text       = "SisgFin",
                 style      = MaterialTheme.typography.headlineMedium,

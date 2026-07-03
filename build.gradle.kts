@@ -101,6 +101,7 @@ compose.desktop {
             )
 
             windows {
+                iconFile.set(project.file("src/main/resources/icon.png"))
                 menuGroup = "SisgFin"
                 upgradeUuid = "3F2A1B4C-5D6E-7F8A-9B0C-1D2E3F4A5B6C"
                 shortcut = true

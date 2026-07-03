@@ -1,5 +1,6 @@
 package br.com.sisgfin
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -8,12 +9,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -101,11 +103,11 @@ fun DbConfigScreen(
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             // Header
-            Icon(
-                Icons.Default.Storage,
-                contentDescription = null,
-                tint = WsAccent,
-                modifier = Modifier.size(40.dp)
+            Image(
+                painter = painterResource("icon.png"),
+                contentDescription = "SisgFin",
+                modifier = Modifier.size(64.dp),
+                contentScale = ContentScale.Fit
             )
             Spacer(Modifier.height(12.dp))
             Text(
