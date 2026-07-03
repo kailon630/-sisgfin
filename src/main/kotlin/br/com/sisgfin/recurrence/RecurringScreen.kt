@@ -76,7 +76,7 @@ fun RecurringScreen(
                     Text("+ Despesa Recorrente")
                 }
                 WsButton(
-                    label = "+ Receita Recorrente",
+                    text = "+ Receita Recorrente",
                     onClick = {
                         viewModel.openNew(TransactionType.INCOME)
                         onShowRightPanel {
@@ -84,7 +84,7 @@ fun RecurringScreen(
                         }
                     }
                 )
-                WsIconButton(Icons.Default.Refresh) { viewModel.load() }
+                WsIconButton(Icons.Default.Refresh, onClick = { viewModel.load() })
             }
         }
 
@@ -401,9 +401,9 @@ fun RecurringDetailsPanel(viewModel: RecurringViewModel, onClose: () -> Unit) {
                         color = WsTextSecondary
                     )
                 } else {
-                    WsButton("Reativar Recorrência", icon = Icons.Default.PlayArrow) {
+                    WsButton("Reativar Recorrência", icon = Icons.Default.PlayArrow, onClick = {
                         viewModel.resume(template.id)
-                    }
+                    })
                     Text(
                         "Reativar gera automaticamente os próximos lançamentos.",
                         style = MaterialTheme.typography.labelSmall,
@@ -474,11 +474,11 @@ fun RecurringDetailsPanel(viewModel: RecurringViewModel, onClose: () -> Unit) {
                 }
             },
             confirmButton = {
-                WsButton("Confirmar") {
+                WsButton("Confirmar", onClick = {
                     viewModel.cancelFuture(template.id)
                     showCancelFutureDialog = false
                     onClose()
-                }
+                })
             },
             dismissButton = {
                 TextButton(onClick = { showCancelFutureDialog = false }) { Text("Voltar") }

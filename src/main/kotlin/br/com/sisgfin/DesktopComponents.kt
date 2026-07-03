@@ -119,7 +119,7 @@ fun CrudToolbar(
                 )
             )
 
-            WsButton(label = newItemLabel, icon = Icons.Default.Add, onClick = onNewItemClick)
+            WsButton(text = newItemLabel, icon = Icons.Default.Add, onClick = onNewItemClick)
             WsIconButton(Icons.Default.Refresh, onClick = onRefreshClick)
         }
     }
@@ -155,7 +155,7 @@ fun WsTableRow(
             .then(
                 if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
             )
-            .padding(horizontal = 16.dp, vertical = 11.dp),
+            .padding(horizontal = WsSpace.lg, vertical = WsSpace.md),
         verticalAlignment = Alignment.CenterVertically,
         content = content
     )
@@ -264,9 +264,9 @@ fun WsSelectField(
                 onValueChange = {},
                 readOnly = true,
                 enabled = false,
-                modifier = Modifier.fillMaxWidth().height(50.dp),
+                modifier = Modifier.fillMaxWidth().height(WsSize.control),
                 textStyle = MaterialTheme.typography.bodyLarge,
-                shape = RoundedCornerShape(6.dp),
+                shape = RoundedCornerShape(WsRadius.md),
                 trailingIcon = {
                     Icon(
                         Icons.Default.ArrowDropDown,
@@ -399,7 +399,7 @@ fun WsDateField(
             },
             enabled = enabled,
             isError = isError,
-            modifier = Modifier.fillMaxWidth().height(50.dp),
+            modifier = Modifier.fillMaxWidth().height(WsSize.control),
             singleLine = true,
             placeholder = {
                 Text(
@@ -419,7 +419,7 @@ fun WsDateField(
             visualTransformation = DateMaskTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             textStyle = MaterialTheme.typography.bodyLarge,
-            shape = RoundedCornerShape(6.dp),
+            shape = RoundedCornerShape(WsRadius.md),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor      = if (isError) WsDanger else WsAccent,
                 unfocusedBorderColor    = if (isError) WsDanger else WsBorder,
@@ -592,48 +592,7 @@ fun WsFilterChip(
     )
 }
 
-@Composable
-fun WsButton(
-    label: String,
-    modifier: Modifier = Modifier,
-    icon: ImageVector? = null,
-    containerColor: Color = Color.Unspecified,
-    onClick: () -> Unit
-) {
-    val effectiveContainer = if (containerColor == Color.Unspecified) WsAccent else containerColor
-    Button(
-        onClick = onClick,
-        modifier = modifier.height(36.dp),
-        shape = RoundedCornerShape(6.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = effectiveContainer,
-            contentColor   = Color.White
-        ),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
-    ) {
-        if (icon != null) {
-            Icon(icon, null, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(8.dp))
-        }
-        Text(label, style = MaterialTheme.typography.titleLarge.copy(fontSize = 13.sp))
-    }
-}
-
-@Composable
-fun WsIconButton(icon: ImageVector, tint: Color = Color.Unspecified, onClick: () -> Unit) {
-    val effectiveTint = if (tint == Color.Unspecified) WsTextSecondary else tint
-    Box(
-        modifier = Modifier
-            .size(36.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .border(1.dp, WsBorder, RoundedCornerShape(6.dp))
-            .background(WsSurface)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(icon, null, tint = effectiveTint, modifier = Modifier.size(18.dp))
-    }
-}
+// WsButton e WsIconButton agora definidos em WsControls.kt (Onda 1)
 
 @Composable
 fun WsTextField(
@@ -656,12 +615,12 @@ fun WsTextField(
             value = value,
             onValueChange = onValueChange,
             enabled = enabled,
-            modifier = Modifier.fillMaxWidth().height(50.dp),
+            modifier = Modifier.fillMaxWidth().height(WsSize.control),
             singleLine = true,
             visualTransformation = visualTransformation,
             keyboardOptions = keyboardOptions,
             textStyle = MaterialTheme.typography.bodyLarge,
-            shape = RoundedCornerShape(6.dp),
+            shape = RoundedCornerShape(WsRadius.md),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor      = WsAccent,
                 unfocusedBorderColor    = WsBorder,

@@ -209,7 +209,7 @@ fun SupplierPopup(item: Supplier?, onSave: (Supplier) -> Unit, onCancel: () -> U
             }
         },
         confirmButton = {
-            WsButton("Confirmar") { onSave(item.copy(name = name, document = document, bank = bank, agency = agency, account = account)) }
+            WsButton("Confirmar", onClick = { onSave(item.copy(name = name, document = document, bank = bank, agency = agency, account = account)) })
         },
         dismissButton = { TextButton(onClick = onCancel) { Text("Cancelar") } }
     )

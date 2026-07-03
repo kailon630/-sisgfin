@@ -72,7 +72,7 @@ fun ContractsScreen(
                     Text("+ Despesa")
                 }
                 WsButton(
-                    label = "+ Receita",
+                    text = "+ Receita",
                     onClick = {
                         viewModel.openNew(TransactionType.INCOME)
                         onShowRightPanel { ContractDetailsPanel(viewModel, onCloseRightPanel) }
@@ -109,9 +109,7 @@ fun ContractsScreen(
         }
 
         if (uiState.isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = WsAccent)
-            }
+            WsLoaderFullscreen()
             return@Column
         }
 
@@ -355,10 +353,10 @@ fun ContractDetailsPanel(
                             ) { Text("Encerrar") }
                         }
                         ContractStatus.SUSPENSO -> {
-                            WsButton(label = "Reativar") {
+                            WsButton("Reativar", onClick = {
                                 viewModel.updateStatus(contract.id, ContractStatus.VIGENTE)
                                 onClose()
-                            }
+                            })
                             WsOutlinedButton(
                                 onClick      = {
                                     targetStatus = ContractStatus.CANCELADO

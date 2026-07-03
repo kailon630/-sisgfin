@@ -104,7 +104,7 @@ fun CashFlowScreen(viewModel: CashFlowViewModel) {
                             )
                         }
                     }
-                    WsIconButton(Icons.Default.Refresh) { viewModel.load() }
+                    WsIconButton(Icons.Default.Refresh, onClick = { viewModel.load() })
                 }
             }
 
@@ -137,9 +137,7 @@ fun CashFlowScreen(viewModel: CashFlowViewModel) {
             }
 
             if (uiState.isLoading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = WsAccent, strokeWidth = 2.dp)
-                }
+                WsLoaderFullscreen()
                 return@Column
             }
 
@@ -148,7 +146,7 @@ fun CashFlowScreen(viewModel: CashFlowViewModel) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(Icons.Outlined.ErrorOutline, null, tint = WsDanger, modifier = Modifier.size(32.dp))
                         Text(err, color = WsDanger)
-                        WsButton("Tentar novamente", icon = Icons.Default.Refresh) { viewModel.load() }
+                        WsButton("Tentar novamente", icon = Icons.Default.Refresh, onClick = { viewModel.load() })
                     }
                 }
                 return@Column
@@ -496,15 +494,16 @@ private fun SimulationPanel(
     }
 
     WsButton(
-        label    = "Adicionar à simulação",
+        text     = "Adicionar à simulação",
         modifier = Modifier.fillMaxWidth(),
-        icon     = Icons.Outlined.Add
-    ) {
-        if (canAdd) {
-            onAdd(SimulationEntry(description.trim(), parsedAmount!!, parsedDate!!, accountId))
-            description = ""; amountStr = ""; dateStr = ""
+        icon     = Icons.Outlined.Add,
+        onClick  = {
+            if (canAdd) {
+                onAdd(SimulationEntry(description.trim(), parsedAmount!!, parsedDate!!, accountId))
+                description = ""; amountStr = ""; dateStr = ""
+            }
         }
-    }
+    )
 
     // ── Lista de simulações ativas
     if (uiState.simulationEntries.isNotEmpty()) {

@@ -57,7 +57,7 @@ fun EmployeesScreen(
             
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 WsButton(
-                    label = "Novo Funcionário",
+                    text = "Novo Funcionário",
                     icon = Icons.Default.Add,
                     onClick = { 
                         viewModel.openEmployeeDialog()
@@ -65,7 +65,7 @@ fun EmployeesScreen(
                     }
                 )
                 
-                WsIconButton(Icons.Default.Refresh) { viewModel.loadEmployees() }
+                WsIconButton(Icons.Default.Refresh, onClick = { viewModel.loadEmployees() })
             }
         }
 
@@ -314,7 +314,7 @@ fun EmployeePopup(employee: Employee?, onSave: (Employee) -> Unit, onCancel: () 
         },
         confirmButton = {
             WsButton(
-                label = "Salvar Registro",
+                text = "Salvar Registro",
                 onClick = {
                     onSave(employee.copy(
                         name = name,

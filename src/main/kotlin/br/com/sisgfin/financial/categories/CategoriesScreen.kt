@@ -231,9 +231,9 @@ fun CategoryPopup(
             }
         },
         confirmButton = {
-            WsButton("Confirmar") {
+            WsButton("Confirmar", onClick = {
                 onSave(item.copy(code = code, name = name))
-            }
+            })
         },
         dismissButton = {
             TextButton(onClick = onCancel) { Text("Cancelar") }

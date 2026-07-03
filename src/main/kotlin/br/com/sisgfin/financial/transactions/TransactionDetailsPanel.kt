@@ -182,7 +182,7 @@ fun TransactionDetailsPanel(
             DetailSection("Ações rápidas") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (TransactionAction.MarkPaid in actions) {
-                        WsButton("Quitar", icon = Icons.Default.Check) { showPaymentDialog = true }
+                        WsButton("Quitar", icon = Icons.Default.Check, onClick = { showPaymentDialog = true })
                     }
                     if (TransactionAction.Cancel in actions) {
                         WsOutlinedButton(
@@ -193,7 +193,7 @@ fun TransactionDetailsPanel(
                         }
                     }
                     if (TransactionAction.Duplicate in actions) {
-                        WsIconButton(Icons.Default.ContentCopy) { viewModel.duplicateTransaction(item.id) }
+                        WsIconButton(Icons.Default.ContentCopy, onClick = { viewModel.duplicateTransaction(item.id) })
                     }
                     if (TransactionAction.Edit in actions && onOpenQuickEdit != null) {
                         WsIconButton(Icons.Default.Edit, onClick = onOpenQuickEdit)
@@ -667,11 +667,11 @@ fun PaymentRecordDialog(
             }
         },
         confirmButton = {
-            WsButton("Confirmar") {
+            WsButton("Confirmar", onClick = {
                 if (dateError == null) {
                     onConfirm(parsedDate.atStartOfDay(), paidStr.toMoney())
                 }
-            }
+            })
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )
@@ -732,9 +732,9 @@ fun ReversalDialog(
             }
         },
         confirmButton = {
-            WsButton("Confirmar estorno") {
+            WsButton("Confirmar estorno", onClick = {
                 if (canConfirm) onConfirm(justification.trim())
-            }
+            })
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )

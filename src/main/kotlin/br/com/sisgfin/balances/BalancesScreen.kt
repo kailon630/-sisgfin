@@ -49,7 +49,7 @@ fun BalancesScreen(viewModel: BalancePanelViewModel) {
                     color = WsTextSecondary
                 )
             }
-            WsIconButton(Icons.Default.Refresh) { viewModel.load() }
+            WsIconButton(Icons.Default.Refresh, onClick = { viewModel.load() })
         }
 
         // Totalizador geral
@@ -90,9 +90,7 @@ fun BalancesScreen(viewModel: BalancePanelViewModel) {
 
         // Lista de contas
         if (uiState.isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = WsAccent)
-            }
+            WsLoaderFullscreen()
         } else if (uiState.errorMessage != null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(uiState.errorMessage!!, color = WsDanger)

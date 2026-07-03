@@ -164,7 +164,7 @@ private fun SelectFileStep(
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
             } else {
                 WsButton(
-                    label = "Selecionar arquivo...",
+                    text = "Selecionar arquivo...",
                     icon  = Icons.Default.FolderOpen,
                     onClick = onSelectFile
                 )
@@ -229,10 +229,10 @@ private fun PreviewStep(
             CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
         } else {
             WsButton(
-                label         = "Importar $newCount lançamentos",
-                icon          = Icons.Default.CloudDownload,
-                containerColor = if (selectedId != null) WsSuccess else WsTextDisabled,
-                onClick       = { if (selectedId != null) onImport() }
+                text    = "Importar $newCount lançamentos",
+                icon    = Icons.Default.CloudDownload,
+                enabled = selectedId != null,
+                onClick = onImport
             )
         }
     }
@@ -396,10 +396,9 @@ private fun ReconcileStep(
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
             }
             WsButton(
-                label          = if (allHandled) "Concluir" else "Pular restantes",
-                icon           = Icons.Default.ArrowForward,
-                containerColor = if (allHandled) WsSuccess else WsTextDisabled,
-                onClick        = onFinish
+                text    = if (allHandled) "Concluir" else "Pular restantes",
+                icon    = Icons.Default.ArrowForward,
+                onClick = onFinish
             )
         }
     }
@@ -578,10 +577,9 @@ private fun ConciliationCandidateCard(
                     }
                     Spacer(Modifier.width(8.dp))
                     WsButton(
-                        label          = "Vincular",
-                        icon           = Icons.Default.Link,
-                        containerColor = WsSuccess,
-                        onClick        = onLink
+                        text    = "Vincular",
+                        icon    = Icons.Default.Link,
+                        onClick = onLink
                     )
                 }
             }
@@ -698,8 +696,8 @@ private fun DoneStep(
                 Text("Nova importação")
             }
             WsButton(
-                label  = "Ver no extrato",
-                icon   = Icons.Default.ArrowForward,
+                text    = "Ver no extrato",
+                icon    = Icons.Default.ArrowForward,
                 onClick = onNavigateToStatement
             )
         }

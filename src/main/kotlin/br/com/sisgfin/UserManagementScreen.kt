@@ -49,14 +49,14 @@ fun UserManagementScreen(
             
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 WsButton(
-                    label = "Novo Usuário",
+                    text = "Novo Usuário",
                     icon = Icons.Default.PersonAdd,
                     onClick = { 
                         viewModel.selectUser(User(name = "", username = "", email = "", passwordHash = ""))
                         onShowRightPanel { UserDetailsPanel(viewModel, onCloseRightPanel) }
                     }
                 )
-                WsIconButton(Icons.Default.Refresh) { viewModel.loadUsers() }
+                WsIconButton(Icons.Default.Refresh, onClick = { viewModel.loadUsers() })
             }
         }
 
@@ -225,12 +225,12 @@ fun UserDetailsPanel(viewModel: UserManagementViewModel, onClose: () -> Unit) {
                     } else {
                         WsTextField("NOVA SENHA", newPassword) { newPassword = it }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            WsButton("Confirmar") { 
+                            WsButton("Confirmar", onClick = {
                                 if (newPassword.isNotBlank()) {
                                     viewModel.resetPassword(user.id, newPassword)
                                     showPasswordReset = false
                                 }
-                            }
+                            })
                             TextButton(onClick = { showPasswordReset = false }) { Text("Cancelar") }
                         }
                     }
@@ -257,7 +257,7 @@ fun UserDetailsPanel(viewModel: UserManagementViewModel, onClose: () -> Unit) {
             }
 
             WsButton(
-                label = "Salvar Usuário",
+                text = "Salvar Usuário",
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
                     val userToSave = user.copy(

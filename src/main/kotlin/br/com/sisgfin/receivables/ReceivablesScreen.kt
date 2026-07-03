@@ -35,9 +35,7 @@ fun ReceivablesScreen(viewModel: ReceivablesViewModel) {
     val uiState by viewModel.uiState.collectAsState()
 
     if (uiState.isLoading) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = WsAccent, strokeWidth = 2.dp)
-        }
+        WsLoaderFullscreen()
         return
     }
 
@@ -56,7 +54,7 @@ fun ReceivablesScreen(viewModel: ReceivablesViewModel) {
                     color = WsTextSecondary
                 )
             }
-            WsIconButton(Icons.Outlined.Refresh) { viewModel.load() }
+            WsIconButton(Icons.Outlined.Refresh, onClick = { viewModel.load() })
         }
 
         // Aging tiles

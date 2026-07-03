@@ -193,12 +193,11 @@ fun TransactionsScreen(
                     Text("Despesa", style = MaterialTheme.typography.titleLarge.copy(fontSize = 13.sp))
                 }
                 WsButton(
-                    label = "Receita",
+                    text = "Receita",
                     icon = Icons.Default.Add,
-                    containerColor = WsSuccess,
                     onClick = { openIncomePanel() }
                 )
-                WsIconButton(Icons.Default.Refresh) { viewModel.load() }
+                WsIconButton(Icons.Default.Refresh, onClick = { viewModel.load() })
             }
         }
 
@@ -623,9 +622,9 @@ fun TransactionQuickPopup(
             }
         },
         confirmButton = {
-            WsButton("Salvar") {
+            WsButton("Salvar", onClick = {
                 onSave(item.copy(description = description, amount = amount.toMoney()))
-            }
+            })
         },
         dismissButton = { TextButton(onClick = onCancel) { Text("Cancelar") } }
     )
@@ -687,24 +686,26 @@ private fun TransferDialog(
             }
         },
         confirmButton = {
-            WsButton("Confirmar Transferência") {
-                errorMsg = null
-                val srcId = sourceAccountId
-                val dstId = destAccountId
-                if (srcId == null) { errorMsg = "Selecione a conta de origem."; return@WsButton }
-                if (dstId == null) { errorMsg = "Selecione a conta de destino."; return@WsButton }
-                if (srcId == dstId) { errorMsg = "A conta de origem e destino não podem ser iguais."; return@WsButton }
-                val amount = runCatching { amountText.toMoney() }.getOrElse {
-                    errorMsg = "Valor inválido."; return@WsButton
+            WsButton("Confirmar Transferência", onClick = {
+                run {
+                    errorMsg = null
+                    val srcId = sourceAccountId
+                    val dstId = destAccountId
+                    if (srcId == null) { errorMsg = "Selecione a conta de origem."; return@run }
+                    if (dstId == null) { errorMsg = "Selecione a conta de destino."; return@run }
+                    if (srcId == dstId) { errorMsg = "A conta de origem e destino não podem ser iguais."; return@run }
+                    val amount = runCatching { amountText.toMoney() }.getOrElse {
+                        errorMsg = "Valor inválido."; return@run
+                    }
+                    if (amount.isZero() || amount.isNegative()) { errorMsg = "O valor deve ser positivo."; return@run }
+                    val date = runCatching { LocalDate.parse(dateText, dateFormatter).atStartOfDay() }.getOrElse {
+                        errorMsg = "Data inválida. Use o formato DD/MM/AAAA."; return@run
+                    }
+                    val desc = description.trim()
+                    if (desc.isBlank()) { errorMsg = "Informe uma descrição."; return@run }
+                    onConfirm(srcId, dstId, amount, date, desc, notes.trim().ifBlank { null })
                 }
-                if (amount.isZero() || amount.isNegative()) { errorMsg = "O valor deve ser positivo."; return@WsButton }
-                val date = runCatching { LocalDate.parse(dateText, dateFormatter).atStartOfDay() }.getOrElse {
-                    errorMsg = "Data inválida. Use o formato DD/MM/AAAA."; return@WsButton
-                }
-                val desc = description.trim()
-                if (desc.isBlank()) { errorMsg = "Informe uma descrição."; return@WsButton }
-                onConfirm(srcId, dstId, amount, date, desc, notes.trim().ifBlank { null })
-            }
+            })
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )

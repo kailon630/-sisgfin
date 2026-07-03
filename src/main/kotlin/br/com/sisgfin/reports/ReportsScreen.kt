@@ -145,11 +145,11 @@ private fun LivroDiarioTab(state: ReportsUiState, viewModel: ReportsViewModel) {
                             placeholder = "Todas as contas"
                         )
                     }
-                    WsButton("Filtrar", icon = Icons.Default.Search) {
+                    WsButton("Filtrar", icon = Icons.Default.Search, onClick = {
                         val from = parseDate(fromStr) ?: filter.from
                         val to   = parseDate(toStr)   ?: filter.to
                         viewModel.applyLivroDiarioFilter(filter.copy(from = from, to = to))
-                    }
+                    })
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     WsOutlinedButton(
@@ -183,9 +183,7 @@ private fun LivroDiarioTab(state: ReportsUiState, viewModel: ReportsViewModel) {
 
         // Table
         if (state.isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = WsAccent)
-            }
+            WsLoaderFullscreen()
         } else if (state.livroDiarioEntries.isEmpty()) {
             EmptyState("Nenhum lançamento liquidado encontrado para o período selecionado.")
         } else {
@@ -346,10 +344,10 @@ private fun BalanceteTab(state: ReportsUiState, viewModel: ReportsViewModel) {
                             placeholder = "Acumulado anual"
                         )
                     }
-                    WsButton("Filtrar", icon = Icons.Default.Search) {
+                    WsButton("Filtrar", icon = Icons.Default.Search, onClick = {
                         val year = yearStr.toIntOrNull() ?: filter.year
                         viewModel.applyBalanceteFilter(filter.copy(year = year))
-                    }
+                    })
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     WsOutlinedButton(
@@ -382,9 +380,7 @@ private fun BalanceteTab(state: ReportsUiState, viewModel: ReportsViewModel) {
 
         // Table
         if (state.isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = WsAccent)
-            }
+            WsLoaderFullscreen()
         } else if (state.balanceteRows.isEmpty()) {
             EmptyState("Nenhuma dotação encontrada para o período. Cadastre itens de orçamento em Orçamento.")
         } else {
@@ -531,11 +527,11 @@ private fun DemonstrativoTab(state: ReportsUiState, viewModel: ReportsViewModel)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Bottom) {
                     WsTextField("DE (DD/MM/AAAA)", fromStr, modifier = Modifier.weight(1f)) { fromStr = it }
                     WsTextField("ATÉ (DD/MM/AAAA)", toStr, modifier = Modifier.weight(1f)) { toStr = it }
-                    WsButton("Filtrar", icon = Icons.Default.Search) {
+                    WsButton("Filtrar", icon = Icons.Default.Search, onClick = {
                         val from = parseDate(fromStr) ?: filter.from
                         val to   = parseDate(toStr)   ?: filter.to
                         viewModel.applyDemonstrativoFilter(filter.copy(from = from, to = to))
-                    }
+                    })
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     WsOutlinedButton(
@@ -570,9 +566,7 @@ private fun DemonstrativoTab(state: ReportsUiState, viewModel: ReportsViewModel)
         }
 
         if (state.isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = WsAccent)
-            }
+            WsLoaderFullscreen()
         } else if (state.demonstrativoRows.isEmpty()) {
             EmptyState("Nenhum lançamento liquidado encontrado para o período selecionado.")
         } else {

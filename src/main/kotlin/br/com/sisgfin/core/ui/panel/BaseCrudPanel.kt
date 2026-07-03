@@ -103,7 +103,7 @@ fun BaseCrudPanel(
                             }
                         }
                         WsButton(
-                            label = saveLabel,
+                            text = saveLabel,
                             modifier = Modifier.weight(if (onCancel != null) 1f else 1f).fillMaxWidth(),
                             onClick = onSave
                         )

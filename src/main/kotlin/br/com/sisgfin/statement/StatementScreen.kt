@@ -69,7 +69,7 @@ fun StatementScreen(viewModel: StatementViewModel) {
                     Spacer(Modifier.width(6.dp))
                     Text("Excel")
                 }
-                WsButton("PDF", icon = Icons.Default.PictureAsPdf) { viewModel.exportPdf() }
+                WsButton("PDF", icon = Icons.Default.PictureAsPdf, onClick = { viewModel.exportPdf() })
             }
         }
 
@@ -110,9 +110,7 @@ fun StatementScreen(viewModel: StatementViewModel) {
         Spacer(Modifier.height(16.dp))
 
         if (state.isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = WsAccent)
-            }
+            WsLoaderFullscreen()
         } else if (state.filter.accountId == null) {
             EmptyState("Selecione uma conta para visualizar o extrato.")
         } else if (state.entries.isEmpty()) {
@@ -163,18 +161,18 @@ private fun StatementFilterBar(
                     toStr,
                     modifier = Modifier.weight(1f)
                 ) { toStr = it }
-                WsButton("Aplicar", icon = Icons.Default.Search) {
+                WsButton("Aplicar", icon = Icons.Default.Search, onClick = {
                     onFilterChange(
                         filter.copy(
                             from = parseLocalDate(fromStr),
                             to = parseLocalDate(toStr)
                         )
                     )
-                }
+                })
                 if (filter.from != null || filter.to != null || filter.type != null || filter.costCenterId != null || filter.categoryId != null) {
-                    WsIconButton(Icons.Default.Close) {
+                    WsIconButton(Icons.Default.Close, onClick = {
                         onFilterChange(StatementFilter(accountId = filter.accountId))
-                    }
+                    })
                 }
             }
             // Row 2: tipo + projeto + categoria

@@ -45,9 +45,7 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
     val uiState by viewModel.uiState.collectAsState()
 
     if (uiState.isLoading) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = WsAccent, strokeWidth = 2.dp)
-        }
+        WsLoaderFullscreen()
         return
     }
 
@@ -56,7 +54,7 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Default.Error, null, tint = WsDanger, modifier = Modifier.size(32.dp))
                 Text(err, color = WsDanger)
-                WsButton("Tentar novamente", icon = Icons.Default.Refresh) { viewModel.load() }
+                WsButton("Tentar novamente", icon = Icons.Default.Refresh, onClick = { viewModel.load() })
             }
         }
         return
@@ -78,7 +76,7 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
                     color = WsTextSecondary
                 )
             }
-            WsIconButton(Icons.Default.Refresh) { viewModel.load() }
+            WsIconButton(Icons.Default.Refresh, onClick = { viewModel.load() })
         }
 
         // ── KPI tiles ──────────────────────────────────────────────────────────

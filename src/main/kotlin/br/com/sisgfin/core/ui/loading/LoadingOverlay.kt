@@ -3,7 +3,7 @@ package br.com.sisgfin.core.ui.loading
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.CircularProgressIndicator
+import br.com.sisgfin.WsLoader
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,6 +21,6 @@ fun LoadingOverlay(
             .background(Color.Black.copy(alpha = 0.25f)),
         contentAlignment = Alignment.Center
     ) {
-        CircularProgressIndicator()
+        WsLoader()
     }
 }

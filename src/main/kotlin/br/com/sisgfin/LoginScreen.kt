@@ -92,7 +92,7 @@ fun LoginScreen(
             }
 
             WsButton(
-                label = "Acessar Workstation",
+                text = "Acessar Workstation",
                 modifier = Modifier.fillMaxWidth().height(44.dp),
                 onClick = { viewModel.login(username, password, onLoginSuccess) }
             )

@@ -59,11 +59,11 @@ fun BudgetScreen(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 YearSelector(selectedYear) { viewModel.selectYear(it) }
-                WsButton("Nova Dotação", icon = Icons.Default.Add) {
+                WsButton("Nova Dotação", icon = Icons.Default.Add, onClick = {
                     viewModel.openNew()
                     onShowRightPanel { BudgetItemPanel(viewModel, onCloseRightPanel) }
-                }
-                WsIconButton(Icons.Default.Refresh) { viewModel.load() }
+                })
+                WsIconButton(Icons.Default.Refresh, onClick = { viewModel.load() })
             }
         }
 
@@ -98,9 +98,7 @@ fun BudgetScreen(
 
         // Tabela
         if (isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = WsAccent)
-            }
+            WsLoaderFullscreen()
         } else if (summaries.isEmpty()) {
             EmptyState("Nenhuma dotação cadastrada para $selectedYear.")
         } else {
@@ -275,7 +273,7 @@ private fun BudgetRow(
                     modifier = Modifier.size(18.dp)
                 )
             } else {
-                WsIconButton(Icons.Default.Edit) { onEdit() }
+                WsIconButton(Icons.Default.Edit, onClick = { onEdit() })
             }
         }
     }
