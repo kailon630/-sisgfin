@@ -185,12 +185,11 @@ fun TransactionDetailsPanel(
                         WsButton("Quitar", icon = Icons.Default.Check, onClick = { showPaymentDialog = true })
                     }
                     if (TransactionAction.Cancel in actions) {
-                        WsOutlinedButton(
-                            onClick = { viewModel.cancelTransaction(item.id) },
-                            contentColor = WsDanger
-                        ) {
-                            Text("Cancelar")
-                        }
+                        WsButton(
+                            text = "Cancelar",
+                            variant = WsButtonVariant.DANGER,
+                            onClick = { viewModel.cancelTransaction(item.id) }
+                        )
                     }
                     if (TransactionAction.Duplicate in actions) {
                         WsIconButton(Icons.Default.ContentCopy, onClick = { viewModel.duplicateTransaction(item.id) })
@@ -200,26 +199,21 @@ fun TransactionDetailsPanel(
                     }
                     // RN-14: botão Estornar — só visível quando status=PAID e canConfirmPayment
                     if (TransactionAction.Reverse in actions) {
-                        OutlinedButton(
-                            onClick = { showReversalDialog = true },
-                            border = androidx.compose.foundation.BorderStroke(1.dp, WsWarning)
-                        ) {
-                            Icon(
-                                Icons.Default.Undo, null,
-                                modifier = Modifier.size(16.dp),
-                                tint = WsWarning
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text("Estornar", color = WsWarning)
-                        }
+                        WsButton(
+                            text = "Estornar",
+                            icon = Icons.Default.Undo,
+                            variant = WsButtonVariant.WARNING,
+                            onClick = { showReversalDialog = true }
+                        )
                     }
                     // RN-31: comprovante PDF — apenas PAID
                     if (item.status == TransactionStatus.PAID) {
-                        WsOutlinedButton(onClick = { viewModel.exportReceipt(item.id) }) {
-                            Icon(Icons.Default.PictureAsPdf, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Comprovante")
-                        }
+                        WsButton(
+                            text = "Comprovante",
+                            icon = Icons.Default.PictureAsPdf,
+                            variant = WsButtonVariant.SECONDARY,
+                            onClick = { viewModel.exportReceipt(item.id) }
+                        )
                     }
                 }
             }
@@ -247,20 +241,15 @@ fun TransactionDetailsPanel(
 
                 // Tipo
                 Text("TIPO", style = MaterialTheme.typography.labelMedium, color = WsTextSecondary)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TransactionType.values().forEach { t ->
-                        WsFilterChip(
-                            selected = type == t,
-                            onClick = {
-                                if (type != t) {
-                                    type = t
-                                    supplierId = null
-                                }
-                            },
-                            label = { Text(t.displayName) }
-                        )
+                WsTypeSelector(
+                    selected = type,
+                    onSelect = { t ->
+                        if (type != t) {
+                            type = t
+                            supplierId = null
+                        }
                     }
-                }
+                )
 
                 // Conta (chips quando poucos, dropdown quando muitos)
                 if (accounts.isEmpty()) {
@@ -673,7 +662,7 @@ fun PaymentRecordDialog(
                 }
             })
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+        dismissButton = { WsButton("Cancelar", variant = WsButtonVariant.TERTIARY, onClick = onDismiss) }
     )
 }
 
@@ -736,7 +725,7 @@ fun ReversalDialog(
                 if (canConfirm) onConfirm(justification.trim())
             })
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+        dismissButton = { WsButton("Cancelar", variant = WsButtonVariant.TERTIARY, onClick = onDismiss) }
     )
 }
 

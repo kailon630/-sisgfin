@@ -5,7 +5,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -23,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -38,7 +41,6 @@ import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.MoneyFormatter
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
 
 // ── Item 1: MoneyText ─────────────────────────────────────────────────────────
 // Componente padronizado para exibir valores monetários com fonte monospace,
@@ -88,35 +90,41 @@ fun CrudToolbar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Item 2: busca funcional conectada ao viewmodel via onSearchQueryChange
-            OutlinedTextField(
+            val searchInteraction = remember { MutableInteractionSource() }
+            val searchFocused by searchInteraction.collectIsFocusedAsState()
+            BasicTextField(
                 value = searchQuery,
                 onValueChange = onSearchQueryChange,
-                modifier = Modifier.width(240.dp).height(40.dp),
-                placeholder = {
-                    Text(
-                        "Filtrar...",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = WsTextDisabled
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        Icons.Default.Search,
-                        contentDescription = null,
-                        tint = WsTextSecondary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyMedium.copy(color = WsTextPrimary),
-                shape = RoundedCornerShape(6.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor   = WsAccent,
-                    unfocusedBorderColor = WsBorder,
-                    focusedContainerColor   = WsBackground,
-                    unfocusedContainerColor = WsBackground,
-                    cursorColor = WsAccent
-                )
+                cursorBrush = SolidColor(WsAccent),
+                interactionSource = searchInteraction,
+                modifier = Modifier.width(240.dp),
+                decorationBox = { innerTextField ->
+                    Row(
+                        modifier = Modifier
+                            .height(40.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(WsBackground)
+                            .border(1.dp, if (searchFocused) WsAccent else WsBorder, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            tint = WsTextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                            if (searchQuery.isEmpty()) {
+                                Text("Filtrar...", style = MaterialTheme.typography.bodyMedium, color = WsTextDisabled)
+                            }
+                            innerTextField()
+                        }
+                    }
+                }
             )
 
             WsButton(text = newItemLabel, icon = Icons.Default.Add, onClick = onNewItemClick)
@@ -238,7 +246,6 @@ fun TopToolbar(username: String, screenTitle: String = "") {
 // Usa Box + OutlinedTextField readOnly + overlay clickável.
 // Mesma altura (50dp), mesmo border radius (6dp) e mesmas cores que WsTextField.
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WsSelectField(
     label: String,
@@ -259,30 +266,32 @@ fun WsSelectField(
             color = if (enabled) WsTextSecondary else WsTextDisabled
         )
         Box {
-            OutlinedTextField(
-                value = selectedLabel,
-                onValueChange = {},
-                readOnly = true,
-                enabled = false,
-                modifier = Modifier.fillMaxWidth().height(WsSize.control),
-                textStyle = MaterialTheme.typography.bodyLarge,
-                shape = RoundedCornerShape(WsRadius.md),
-                trailingIcon = {
-                    Icon(
-                        Icons.Default.ArrowDropDown,
-                        contentDescription = null,
-                        tint = if (enabled) WsTextSecondary else WsTextDisabled,
-                        modifier = Modifier.size(20.dp)
-                    )
-                },
-                colors = OutlinedTextFieldDefaults.colors(
-                    disabledBorderColor    = if (expanded) WsAccent else WsBorder,
-                    disabledContainerColor = if (enabled) WsBackground else WsElevated,
-                    disabledTextColor      = if (selectedId == null) WsTextDisabled else WsTextPrimary,
-                    disabledTrailingIconColor = WsTextSecondary
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(WsSize.control)
+                    .clip(RoundedCornerShape(WsRadius.md))
+                    .background(if (enabled) WsBackground else WsElevated)
+                    .border(1.dp, if (expanded) WsAccent else WsBorder, RoundedCornerShape(WsRadius.md))
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    selectedLabel,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (selectedId == null) WsTextDisabled else (if (enabled) WsTextPrimary else WsTextSecondary),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
-            )
-            // Overlay invisível captura cliques sem interferir no TextField
+                Icon(
+                    Icons.Default.ArrowDropDown,
+                    contentDescription = null,
+                    tint = if (enabled) WsTextSecondary else WsTextDisabled,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
             if (enabled) {
                 Box(
                     modifier = Modifier
@@ -391,47 +400,64 @@ fun WsDateField(
                 )
             }
         }
-        OutlinedTextField(
+        val dateInteraction = remember { MutableInteractionSource() }
+        val dateFocused by dateInteraction.collectIsFocusedAsState()
+        val borderColor = when {
+            isError   -> WsDanger
+            dateFocused -> WsAccent
+            else      -> WsBorder
+        }
+        BasicTextField(
             value = digits,
             onValueChange = { input ->
-                val newDigits = input.filter { it.isDigit() }.take(8)
+                val newDigits = input.filter(Char::isDigit).take(8)
                 onValueChange(newDigits)
             },
             enabled = enabled,
-            isError = isError,
-            modifier = Modifier.fillMaxWidth().height(WsSize.control),
             singleLine = true,
-            placeholder = {
-                Text(
-                    "dd/mm/aaaa",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = WsTextDisabled
-                )
-            },
-            leadingIcon = {
-                Icon(
-                    Icons.Default.CalendarMonth,
-                    contentDescription = null,
-                    tint = if (isError) WsDanger else WsTextDisabled,
-                    modifier = Modifier.size(16.dp)
-                )
-            },
             visualTransformation = DateMaskTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            textStyle = MaterialTheme.typography.bodyLarge,
-            shape = RoundedCornerShape(WsRadius.md),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor      = if (isError) WsDanger else WsAccent,
-                unfocusedBorderColor    = if (isError) WsDanger else WsBorder,
-                focusedContainerColor   = WsBackground,
-                unfocusedContainerColor = WsBackground,
-                disabledBorderColor     = WsBorder,
-                disabledContainerColor  = WsElevated,
-                disabledTextColor       = WsTextSecondary,
-                cursorColor             = WsAccent,
-                errorBorderColor        = WsDanger,
-                errorContainerColor     = WsDanger.copy(alpha = 0.05f)
-            )
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = if (enabled) WsTextPrimary else WsTextSecondary
+            ),
+            cursorBrush = SolidColor(if (isError) WsDanger else WsAccent),
+            interactionSource = dateInteraction,
+            decorationBox = { innerTextField ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(WsSize.control)
+                        .clip(RoundedCornerShape(WsRadius.md))
+                        .background(
+                            when {
+                                !enabled -> WsElevated
+                                isError  -> WsDanger.copy(alpha = 0.05f)
+                                else     -> WsBackground
+                            }
+                        )
+                        .border(1.dp, borderColor, RoundedCornerShape(WsRadius.md))
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Default.CalendarMonth,
+                        contentDescription = null,
+                        tint = if (isError) WsDanger else WsTextDisabled,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                        if (digits.isEmpty()) {
+                            Text(
+                                "dd/mm/aaaa",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = WsTextDisabled
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
+            }
         )
     }
 }
@@ -544,26 +570,6 @@ fun StatusBar(username: String = "", overdueCount: Int = 0) {
     }
 }
 
-@Composable
-fun WsOutlinedButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    contentColor: Color = Color.Unspecified,
-    content: @Composable RowScope.() -> Unit
-) {
-    val effectiveColor = if (contentColor == Color.Unspecified) WsTextSecondary else contentColor
-    OutlinedButton(
-        onClick = onClick,
-        modifier = modifier,
-        enabled = enabled,
-        shape = RoundedCornerShape(6.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, WsBorderLight),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = effectiveColor),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-        content = content
-    )
-}
 
 @Composable
 fun WsFilterChip(
@@ -600,39 +606,45 @@ fun WsTextField(
     value: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    visualTransformation: androidx.compose.ui.text.input.VisualTransformation =
-        androidx.compose.ui.text.input.VisualTransformation.None,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     onValueChange: (String) -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
             color = if (enabled) WsTextSecondary else WsTextDisabled
         )
-        OutlinedTextField(
+        BasicTextField(
             value = value,
             onValueChange = onValueChange,
             enabled = enabled,
-            modifier = Modifier.fillMaxWidth().height(WsSize.control),
             singleLine = true,
             visualTransformation = visualTransformation,
             keyboardOptions = keyboardOptions,
-            textStyle = MaterialTheme.typography.bodyLarge,
-            shape = RoundedCornerShape(WsRadius.md),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor      = WsAccent,
-                unfocusedBorderColor    = WsBorder,
-                focusedContainerColor   = WsBackground,
-                unfocusedContainerColor = WsBackground,
-                focusedTextColor        = WsTextPrimary,
-                unfocusedTextColor      = WsTextPrimary,
-                disabledBorderColor     = WsBorder,
-                disabledContainerColor  = WsElevated,
-                disabledTextColor       = WsTextSecondary,
-                cursorColor             = WsAccent
-            )
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = if (enabled) WsTextPrimary else WsTextSecondary
+            ),
+            cursorBrush = SolidColor(WsAccent),
+            interactionSource = interactionSource,
+            decorationBox = { innerTextField ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(WsSize.control)
+                        .clip(RoundedCornerShape(WsRadius.md))
+                        .background(if (enabled) WsBackground else WsElevated)
+                        .border(1.dp, if (isFocused) WsAccent else WsBorder, RoundedCornerShape(WsRadius.md))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    innerTextField()
+                }
+            }
         )
     }
 }

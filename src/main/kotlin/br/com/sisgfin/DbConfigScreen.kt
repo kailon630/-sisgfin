@@ -189,23 +189,13 @@ fun DbConfigScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedButton(
-                        onClick = { testConnection(andConnect = false) },
-                        enabled = canSubmit && !isTesting,
-                        shape = RoundedCornerShape(6.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, WsBorderLight),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = WsTextSecondary)
-                    ) {
-                        if (isTesting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(14.dp),
-                                strokeWidth = 2.dp,
-                                color = WsTextSecondary
-                            )
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        Text("Testar conexão", fontSize = 13.sp)
-                    }
+                    WsButton(
+                        text = "Testar conexão",
+                        variant = WsButtonVariant.SECONDARY,
+                        enabled = canSubmit,
+                        loading = isTesting,
+                        onClick = { testConnection(andConnect = false) }
+                    )
 
                     Button(
                         onClick = { testConnection(andConnect = true) },

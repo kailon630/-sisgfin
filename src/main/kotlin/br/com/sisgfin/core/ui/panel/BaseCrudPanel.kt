@@ -11,7 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import br.com.sisgfin.WsButton
-import br.com.sisgfin.WsOutlinedButton
+import br.com.sisgfin.WsButtonVariant
 import br.com.sisgfin.WsTextSecondary
 import br.com.sisgfin.core.ui.loading.LoadingOverlay
 
@@ -98,9 +98,12 @@ fun BaseCrudPanel(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         onCancel?.let { cancel ->
-                            WsOutlinedButton(onClick = cancel, modifier = Modifier.weight(1f)) {
-                                Text("Cancelar")
-                            }
+                            WsButton(
+                                text = "Cancelar",
+                                variant = WsButtonVariant.SECONDARY,
+                                modifier = Modifier.weight(1f),
+                                onClick = cancel
+                            )
                         }
                         WsButton(
                             text = saveLabel,

@@ -62,19 +62,17 @@ fun RecurringScreen(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                WsOutlinedButton(
+                WsButton(
+                    text = "+ Despesa Recorrente",
+                    icon = Icons.Default.RemoveCircleOutline,
+                    variant = WsButtonVariant.DANGER,
                     onClick = {
                         viewModel.openNew(TransactionType.EXPENSE)
                         onShowRightPanel {
                             RecurringDetailsPanel(viewModel, onCloseRightPanel)
                         }
-                    },
-                    contentColor = WsDanger
-                ) {
-                    Icon(Icons.Default.RemoveCircleOutline, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("+ Despesa Recorrente")
-                }
+                    }
+                )
                 WsButton(
                     text = "+ Receita Recorrente",
                     onClick = {
@@ -378,22 +376,18 @@ fun RecurringDetailsPanel(viewModel: RecurringViewModel, onClose: () -> Unit) {
             DetailSection("Controle") {
                 if (template.isActive) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        WsOutlinedButton(
-                            onClick = { viewModel.pause(template.id) },
-                            contentColor = WsWarning
-                        ) {
-                            Icon(Icons.Default.Pause, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Pausar")
-                        }
-                        WsOutlinedButton(
-                            onClick = { showCancelFutureDialog = true },
-                            contentColor = WsDanger
-                        ) {
-                            Icon(Icons.Default.CancelScheduleSend, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Cancelar Futuras")
-                        }
+                        WsButton(
+                            text = "Pausar",
+                            icon = Icons.Default.Pause,
+                            variant = WsButtonVariant.WARNING,
+                            onClick = { viewModel.pause(template.id) }
+                        )
+                        WsButton(
+                            text = "Cancelar Futuras",
+                            icon = Icons.Default.CancelScheduleSend,
+                            variant = WsButtonVariant.DANGER,
+                            onClick = { showCancelFutureDialog = true }
+                        )
                     }
                     Text(
                         "Pausar mantém os lançamentos já gerados. Cancelar Futuras também cancela os PENDENTES.",
@@ -481,7 +475,7 @@ fun RecurringDetailsPanel(viewModel: RecurringViewModel, onClose: () -> Unit) {
                 })
             },
             dismissButton = {
-                TextButton(onClick = { showCancelFutureDialog = false }) { Text("Voltar") }
+                WsButton("Voltar", variant = WsButtonVariant.TERTIARY, onClick = { showCancelFutureDialog = false })
             }
         )
     }

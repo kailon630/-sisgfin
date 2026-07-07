@@ -62,15 +62,14 @@ fun ContractsScreen(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                WsOutlinedButton(
+                WsButton(
+                    text = "+ Despesa",
+                    variant = WsButtonVariant.DANGER,
                     onClick = {
                         viewModel.openNew(TransactionType.EXPENSE)
                         onShowRightPanel { ContractDetailsPanel(viewModel, onCloseRightPanel) }
-                    },
-                    contentColor = WsDanger
-                ) {
-                    Text("+ Despesa")
-                }
+                    }
+                )
                 WsButton(
                     text = "+ Receita",
                     onClick = {
@@ -337,33 +336,36 @@ fun ContractDetailsPanel(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     when (contract.status) {
                         ContractStatus.VIGENTE -> {
-                            WsOutlinedButton(
-                                onClick      = {
+                            WsButton(
+                                text = "Suspender",
+                                variant = WsButtonVariant.WARNING,
+                                onClick = {
                                     viewModel.updateStatus(contract.id, ContractStatus.SUSPENSO)
                                     onClose()
-                                },
-                                contentColor = WsWarning
-                            ) { Text("Suspender") }
-                            WsOutlinedButton(
-                                onClick      = {
+                                }
+                            )
+                            WsButton(
+                                text = "Encerrar",
+                                variant = WsButtonVariant.DANGER,
+                                onClick = {
                                     targetStatus = ContractStatus.ENCERRADO
                                     showStatusDialog = true
-                                },
-                                contentColor = WsDanger
-                            ) { Text("Encerrar") }
+                                }
+                            )
                         }
                         ContractStatus.SUSPENSO -> {
                             WsButton("Reativar", onClick = {
                                 viewModel.updateStatus(contract.id, ContractStatus.VIGENTE)
                                 onClose()
                             })
-                            WsOutlinedButton(
-                                onClick      = {
+                            WsButton(
+                                text = "Cancelar Contrato",
+                                variant = WsButtonVariant.DANGER,
+                                onClick = {
                                     targetStatus = ContractStatus.CANCELADO
                                     showStatusDialog = true
-                                },
-                                contentColor = WsDanger
-                            ) { Text("Cancelar Contrato") }
+                                }
+                            )
                         }
                         else -> {
                             Text(
@@ -406,14 +408,14 @@ fun ContractDetailsPanel(
             title = { Text("Confirmar ${targetStatus.displayName}") },
             text  = { Text("Deseja marcar este contrato como '${targetStatus.displayName}'? Novos lançamentos não poderão ser vinculados.") },
             confirmButton = {
-                TextButton(onClick = {
+                WsButton("Confirmar", variant = WsButtonVariant.DANGER, onClick = {
                     showStatusDialog = false
                     viewModel.updateStatus(contract.id, targetStatus)
                     onClose()
-                }) { Text("Confirmar", color = WsDanger) }
+                })
             },
             dismissButton = {
-                TextButton(onClick = { showStatusDialog = false }) { Text("Cancelar") }
+                WsButton("Cancelar", variant = WsButtonVariant.TERTIARY, onClick = { showStatusDialog = false })
             },
             containerColor = WsSurface
         )

@@ -36,8 +36,8 @@ fun SupplierManagementScreen(
         CrudToolbar(
             title = "Fornecedores e Credores",
             subtitle = "Gestão de favorecidos financeiros e prestadores de serviço",
-            searchQuery = "",
-            onSearchQueryChange = {},
+            searchQuery = uiState.searchQuery,
+            onSearchQueryChange = { viewModel.search(it) },
             newItemLabel = "Novo Fornecedor",
             onNewItemClick = {
                 viewModel.openNew()
@@ -211,6 +211,6 @@ fun SupplierPopup(item: Supplier?, onSave: (Supplier) -> Unit, onCancel: () -> U
         confirmButton = {
             WsButton("Confirmar", onClick = { onSave(item.copy(name = name, document = document, bank = bank, agency = agency, account = account)) })
         },
-        dismissButton = { TextButton(onClick = onCancel) { Text("Cancelar") } }
+        dismissButton = { WsButton("Cancelar", variant = WsButtonVariant.TERTIARY, onClick = onCancel) }
     )
 }

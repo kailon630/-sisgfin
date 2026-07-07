@@ -6,8 +6,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -22,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -167,31 +170,18 @@ fun TransactionsScreen(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(
-                    onClick = { viewModel.openTransferDialog() },
-                    shape = RoundedCornerShape(6.dp),
-                    modifier = Modifier.height(36.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, WsBorderLight),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = WsTextSecondary),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
-                ) {
-                    Icon(Icons.Default.SwapHoriz, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Transferência", style = MaterialTheme.typography.titleLarge.copy(fontSize = 13.sp))
-                }
-                // Ajuste 2: dois botões explícitos com tipo pré-selecionado
-                OutlinedButton(
-                    onClick = { openExpensePanel() },
-                    shape = RoundedCornerShape(6.dp),
-                    modifier = Modifier.height(36.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, WsDanger.copy(alpha = 0.6f)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = WsDanger),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
-                ) {
-                    Icon(Icons.Default.Remove, null, modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Despesa", style = MaterialTheme.typography.titleLarge.copy(fontSize = 13.sp))
-                }
+                WsButton(
+                    text = "Transferência",
+                    icon = Icons.Default.SwapHoriz,
+                    variant = WsButtonVariant.SECONDARY,
+                    onClick = { viewModel.openTransferDialog() }
+                )
+                WsButton(
+                    text = "Despesa",
+                    icon = Icons.Default.Remove,
+                    variant = WsButtonVariant.DANGER,
+                    onClick = { openExpensePanel() }
+                )
                 WsButton(
                     text = "Receita",
                     icon = Icons.Default.Add,
@@ -337,38 +327,37 @@ private fun TransactionFilterBar(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Surface(
-                modifier = Modifier.width(280.dp).height(36.dp),
-                shape = RoundedCornerShape(6.dp),
-                color = WsSurface,
-                border = androidx.compose.foundation.BorderStroke(1.dp, WsBorder)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Search, null, tint = WsTextSecondary, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(8.dp))
-                    TextField(
-                        value = searchQuery,
-                        onValueChange = onSearchChange,
-                        modifier = Modifier.fillMaxWidth().focusRequester(searchFocus),
-                        placeholder = { Text("Buscar... (Ctrl+F)") },
-                        singleLine = true,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            focusedTextColor = WsTextPrimary,
-                            unfocusedTextColor = WsTextPrimary,
-                            focusedPlaceholderColor = WsTextDisabled,
-                            unfocusedPlaceholderColor = WsTextDisabled,
-                            cursorColor = WsAccent
-                        )
-                    )
+            val searchInteraction = remember { MutableInteractionSource() }
+            val searchFocused by searchInteraction.collectIsFocusedAsState()
+            BasicTextField(
+                value = searchQuery,
+                onValueChange = onSearchChange,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = WsTextPrimary),
+                cursorBrush = SolidColor(WsAccent),
+                interactionSource = searchInteraction,
+                modifier = Modifier.width(280.dp).focusRequester(searchFocus),
+                decorationBox = { innerTextField ->
+                    Row(
+                        modifier = Modifier
+                            .height(WsSize.control)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(WsSurface)
+                            .border(1.dp, if (searchFocused) WsAccent else WsBorder, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Search, null, tint = WsTextSecondary, modifier = Modifier.size(16.dp))
+                        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                            if (searchQuery.isEmpty()) {
+                                Text("Buscar... (Ctrl+F)", style = MaterialTheme.typography.bodyMedium, color = WsTextDisabled)
+                            }
+                            innerTextField()
+                        }
+                    }
                 }
-            }
+            )
         }
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -626,7 +615,7 @@ fun TransactionQuickPopup(
                 onSave(item.copy(description = description, amount = amount.toMoney()))
             })
         },
-        dismissButton = { TextButton(onClick = onCancel) { Text("Cancelar") } }
+        dismissButton = { WsButton("Cancelar", variant = WsButtonVariant.TERTIARY, onClick = onCancel) }
     )
 }
 
@@ -707,6 +696,6 @@ private fun TransferDialog(
                 }
             })
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+        dismissButton = { WsButton("Cancelar", variant = WsButtonVariant.TERTIARY, onClick = onDismiss) }
     )
 }

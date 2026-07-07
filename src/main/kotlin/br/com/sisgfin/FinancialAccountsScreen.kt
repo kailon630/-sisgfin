@@ -41,8 +41,8 @@ fun FinancialAccountsScreen(
         CrudToolbar(
             title = "Contas e Caixas",
             subtitle = "Gerenciamento de contas bancárias e disponibilidades financeiras",
-            searchQuery = "",
-            onSearchQueryChange = {},
+            searchQuery = uiState.searchQuery,
+            onSearchQueryChange = { viewModel.search(it) },
             newItemLabel = "Nova Conta",
             onNewItemClick = {
                 viewModel.openNew()

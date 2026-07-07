@@ -58,17 +58,13 @@ fun StatementScreen(viewModel: StatementViewModel) {
             }
             // Export buttons
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    onClick = { viewModel.exportExcel() },
+                WsButton(
+                    text = "Excel",
+                    icon = Icons.Outlined.TableChart,
+                    variant = WsButtonVariant.SECONDARY,
                     enabled = state.entries.isNotEmpty(),
-                    shape = RoundedCornerShape(6.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, WsBorderLight),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = WsTextSecondary)
-                ) {
-                    Icon(Icons.Outlined.TableChart, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Excel")
-                }
+                    onClick = { viewModel.exportExcel() }
+                )
                 WsButton("PDF", icon = Icons.Default.PictureAsPdf, onClick = { viewModel.exportPdf() })
             }
         }

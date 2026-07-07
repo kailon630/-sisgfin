@@ -329,9 +329,7 @@ fun EmployeePopup(employee: Employee?, onSave: (Employee) -> Unit, onCancel: () 
             )
         },
         dismissButton = {
-            TextButton(onClick = onCancel) {
-                Text("Descartar", color = WsTextSecondary)
-            }
+            WsButton("Descartar", variant = WsButtonVariant.TERTIARY, onClick = onCancel)
         }
     )
 }

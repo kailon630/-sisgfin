@@ -83,7 +83,7 @@ compose.desktop {
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Deb,
             )
             packageName = "SisgFin"
-            packageVersion = "1.0.4"
+            packageVersion = "1.0.5"
             description = "Sistema de Gestão Financeira"
             vendor = "Associação Terapêutica Cannabis Medicinal Flor da Vida"
             copyright = "© 2025 Flor da Vida. Todos os direitos reservados."
@@ -101,7 +101,7 @@ compose.desktop {
             )
 
             windows {
-                iconFile.set(project.file("src/main/resources/icon.png"))
+                iconFile.set(project.file("src/main/resources/icon.ico"))
                 menuGroup = "SisgFin"
                 upgradeUuid = "3F2A1B4C-5D6E-7F8A-9B0C-1D2E3F4A5B6C"
                 shortcut = true

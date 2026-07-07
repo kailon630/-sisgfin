@@ -33,8 +33,8 @@ fun CategoriesScreen(
         CrudToolbar(
             title = "Plano de Contas",
             subtitle = "Categorias de despesas e receitas",
-            searchQuery = "",
-            onSearchQueryChange = {},
+            searchQuery = uiState.searchQuery,
+            onSearchQueryChange = { viewModel.search(it) },
             newItemLabel = "Nova Categoria",
             onNewItemClick = {
                 viewModel.openNew()
@@ -236,7 +236,7 @@ fun CategoryPopup(
             })
         },
         dismissButton = {
-            TextButton(onClick = onCancel) { Text("Cancelar") }
+            WsButton("Cancelar", variant = WsButtonVariant.TERTIARY, onClick = onCancel)
         }
     )
 }

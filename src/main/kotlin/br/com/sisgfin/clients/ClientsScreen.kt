@@ -33,8 +33,8 @@ fun ClientsScreen(
         CrudToolbar(
             title = "Clientes",
             subtitle = "Contrapartes de receitas e recebimentos",
-            searchQuery = "",
-            onSearchQueryChange = {},
+            searchQuery = uiState.searchQuery,
+            onSearchQueryChange = { viewModel.search(it) },
             newItemLabel = "Novo Cliente",
             onNewItemClick = {
                 viewModel.openNew()

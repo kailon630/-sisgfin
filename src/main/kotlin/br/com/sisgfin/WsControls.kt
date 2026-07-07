@@ -39,55 +39,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/* ───────────────────────────────────────────────────────────────────────────
- * PROBLEMA #1 da auditoria — WsButton sem `enabled` e sem estado de loading.
- * Consequência: Login, Salvar, Exportar aceitam duplo-clique durante a coroutine.
- *
- * Correção: `enabled` + `loading`. Quando loading=true, o botão desabilita
- * sozinho e troca o conteúdo por um spinner — não há como disparar 2×.
- * ─────────────────────────────────────────────────────────────────────────── */
-@Composable
-fun WsButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    icon: ImageVector? = null,
-    enabled: Boolean = true,
-    loading: Boolean = false,          // NOVO
-    height: androidx.compose.ui.unit.Dp = WsSize.control,  // 40dp — unificado
-) {
-    val isEnabled = enabled && !loading
-    val interaction = remember { MutableInteractionSource() }
-
-    androidx.compose.material3.Button(
-        onClick = onClick,
-        enabled = isEnabled,
-        interactionSource = interaction,
-        shape = RoundedCornerShape(WsRadius.md),
-        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-            containerColor = WsAccent,
-            contentColor = Color.White,
-            disabledContainerColor = WsAccent.copy(alpha = 0.4f),
-            disabledContentColor = Color.White.copy(alpha = 0.6f),
-        ),
-        contentPadding = PaddingValues(horizontal = WsSpace.lg, vertical = 0.dp),
-        modifier = modifier
-            .height(height)
-            .wsPressScale(interaction),
-    ) {
-        if (loading) {
-            WsSpinner(size = 16.dp, stroke = 2.dp, color = Color.White)
-            Spacer(Modifier.width(WsSpace.sm))
-            Text("Aguarde…", fontSize = 13.sp, fontWeight = FontWeight.Medium)
-        } else {
-            if (icon != null) {
-                Icon(icon, null, Modifier.size(WsSize.iconInner))
-                Spacer(Modifier.width(WsSpace.sm))
-            }
-            Text(text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-        }
-    }
-}
 
 /* ───────────────────────────────────────────────────────────────────────────
  * PROBLEMA #2 — WsIconButton sem hover, sem enabled, sem focus.

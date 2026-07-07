@@ -38,8 +38,8 @@ fun CostCentersScreen(
         CrudToolbar(
             title = "Centros de Custo",
             subtitle = "Projetos, convênios e agrupamentos financeiros",
-            searchQuery = "",
-            onSearchQueryChange = {},
+            searchQuery = uiState.searchQuery,
+            onSearchQueryChange = { viewModel.search(it) },
             newItemLabel = "Novo Centro de Custo",
             onNewItemClick = {
                 viewModel.openNew()

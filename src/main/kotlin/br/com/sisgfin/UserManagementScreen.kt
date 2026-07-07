@@ -231,7 +231,7 @@ fun UserDetailsPanel(viewModel: UserManagementViewModel, onClose: () -> Unit) {
                                     showPasswordReset = false
                                 }
                             })
-                            TextButton(onClick = { showPasswordReset = false }) { Text("Cancelar") }
+                            WsButton("Cancelar", variant = WsButtonVariant.TERTIARY, onClick = { showPasswordReset = false })
                         }
                     }
                 } else {

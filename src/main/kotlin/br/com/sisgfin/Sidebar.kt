@@ -38,7 +38,10 @@ fun Sidebar(
     val currentUser by sessionManager.currentUser.collectAsState()
     val isAdmin = currentUser?.role == UserRole.ADMIN
 
-    var isExpanded by remember { mutableStateOf(false) }
+    var isExpanded by remember { mutableStateOf(currentScreen is Screen.Dashboard) }
+    LaunchedEffect(currentScreen) {
+        isExpanded = currentScreen is Screen.Dashboard
+    }
     val width by animateDpAsState(targetValue = if (isExpanded) 220.dp else 64.dp)
 
     Column(

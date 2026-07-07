@@ -152,22 +152,20 @@ private fun LivroDiarioTab(state: ReportsUiState, viewModel: ReportsViewModel) {
                     })
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    WsOutlinedButton(
-                        onClick = { viewModel.exportLivroDiarioPdf() },
-                        enabled = state.livroDiarioEntries.isNotEmpty()
-                    ) {
-                        Icon(Icons.Outlined.PictureAsPdf, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Exportar PDF")
-                    }
-                    WsOutlinedButton(
-                        onClick = { viewModel.exportLivroDiarioExcel() },
-                        enabled = state.livroDiarioEntries.isNotEmpty()
-                    ) {
-                        Icon(Icons.Outlined.TableChart, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Exportar Excel")
-                    }
+                    WsButton(
+                        text = "Exportar PDF",
+                        icon = Icons.Outlined.PictureAsPdf,
+                        variant = WsButtonVariant.SECONDARY,
+                        enabled = state.livroDiarioEntries.isNotEmpty(),
+                        onClick = { viewModel.exportLivroDiarioPdf() }
+                    )
+                    WsButton(
+                        text = "Exportar Excel",
+                        icon = Icons.Outlined.TableChart,
+                        variant = WsButtonVariant.SECONDARY,
+                        enabled = state.livroDiarioEntries.isNotEmpty(),
+                        onClick = { viewModel.exportLivroDiarioExcel() }
+                    )
                     Spacer(Modifier.weight(1f))
                     if (state.livroDiarioEntries.isNotEmpty()) {
                         Text(
@@ -350,22 +348,20 @@ private fun BalanceteTab(state: ReportsUiState, viewModel: ReportsViewModel) {
                     })
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    WsOutlinedButton(
-                        onClick = { viewModel.exportBalancetePdf() },
-                        enabled = state.balanceteRows.isNotEmpty()
-                    ) {
-                        Icon(Icons.Outlined.PictureAsPdf, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Exportar PDF")
-                    }
-                    WsOutlinedButton(
-                        onClick = { viewModel.exportBalanceteExcel() },
-                        enabled = state.balanceteRows.isNotEmpty()
-                    ) {
-                        Icon(Icons.Outlined.TableChart, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Exportar Excel")
-                    }
+                    WsButton(
+                        text = "Exportar PDF",
+                        icon = Icons.Outlined.PictureAsPdf,
+                        variant = WsButtonVariant.SECONDARY,
+                        enabled = state.balanceteRows.isNotEmpty(),
+                        onClick = { viewModel.exportBalancetePdf() }
+                    )
+                    WsButton(
+                        text = "Exportar Excel",
+                        icon = Icons.Outlined.TableChart,
+                        variant = WsButtonVariant.SECONDARY,
+                        enabled = state.balanceteRows.isNotEmpty(),
+                        onClick = { viewModel.exportBalanceteExcel() }
+                    )
                     Spacer(Modifier.weight(1f))
                     val periodLabel = filter.month?.let { MESES_PT[it - 1] } ?: "Acumulado ${filter.year}"
                     Text(
@@ -534,22 +530,20 @@ private fun DemonstrativoTab(state: ReportsUiState, viewModel: ReportsViewModel)
                     })
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    WsOutlinedButton(
-                        onClick = { viewModel.exportDemonstrativoPdf() },
-                        enabled = state.demonstrativoRows.isNotEmpty()
-                    ) {
-                        Icon(Icons.Outlined.PictureAsPdf, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Exportar PDF")
-                    }
-                    WsOutlinedButton(
-                        onClick = { viewModel.exportDemonstrativoExcel() },
-                        enabled = state.demonstrativoRows.isNotEmpty()
-                    ) {
-                        Icon(Icons.Outlined.TableChart, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Exportar Excel")
-                    }
+                    WsButton(
+                        text = "Exportar PDF",
+                        icon = Icons.Outlined.PictureAsPdf,
+                        variant = WsButtonVariant.SECONDARY,
+                        enabled = state.demonstrativoRows.isNotEmpty(),
+                        onClick = { viewModel.exportDemonstrativoPdf() }
+                    )
+                    WsButton(
+                        text = "Exportar Excel",
+                        icon = Icons.Outlined.TableChart,
+                        variant = WsButtonVariant.SECONDARY,
+                        enabled = state.demonstrativoRows.isNotEmpty(),
+                        onClick = { viewModel.exportDemonstrativoExcel() }
+                    )
                     Spacer(Modifier.weight(1f))
                     if (state.demonstrativoRows.isNotEmpty()) {
                         val totIncome  = state.demonstrativoRows.fold(Money.ZERO) { a, r -> a + r.income }

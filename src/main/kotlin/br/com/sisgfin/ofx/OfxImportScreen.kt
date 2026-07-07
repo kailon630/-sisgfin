@@ -565,16 +565,12 @@ private fun ConciliationCandidateCard(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedButton(
-                        onClick = onIgnore,
-                        shape = RoundedCornerShape(6.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, WsBorderLight),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = WsTextSecondary)
-                    ) {
-                        Icon(Icons.Default.Close, null, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Ignorar")
-                    }
+                    WsButton(
+                        text = "Ignorar",
+                        icon = Icons.Default.Close,
+                        variant = WsButtonVariant.SECONDARY,
+                        onClick = onIgnore
+                    )
                     Spacer(Modifier.width(8.dp))
                     WsButton(
                         text    = "Vincular",
@@ -685,16 +681,12 @@ private fun DoneStep(
 
         // Ações
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(
-                onClick = onNewImport,
-                shape = RoundedCornerShape(6.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, WsBorderLight),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = WsTextSecondary)
-            ) {
-                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Nova importação")
-            }
+            WsButton(
+                text = "Nova importação",
+                icon = Icons.Default.Refresh,
+                variant = WsButtonVariant.SECONDARY,
+                onClick = onNewImport
+            )
             WsButton(
                 text    = "Ver no extrato",
                 icon    = Icons.Default.ArrowForward,

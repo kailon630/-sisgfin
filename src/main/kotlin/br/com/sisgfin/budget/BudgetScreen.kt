@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import br.com.sisgfin.*
 import br.com.sisgfin.core.ui.notifications.CrudEventEffects
-import br.com.sisgfin.WsOutlinedButton
 import br.com.sisgfin.core.ui.panel.BaseCrudPanel
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.MoneyFormatter
@@ -124,13 +123,12 @@ private fun YearSelector(year: Int, onSelect: (Int) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     val years = (LocalDate.now().year + 1 downTo 2020).toList()
     Box {
-        WsOutlinedButton(
-            onClick = { expanded = true },
-            modifier = Modifier.height(36.dp)
-        ) {
-            Text("$year", style = MaterialTheme.typography.bodyLarge)
-            Icon(Icons.Default.ArrowDropDown, null, modifier = Modifier.size(18.dp))
-        }
+        WsButton(
+            text = "$year",
+            icon = Icons.Default.ArrowDropDown,
+            variant = WsButtonVariant.SECONDARY,
+            onClick = { expanded = true }
+        )
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, containerColor = WsElevated) {
             years.forEach { y ->
                 DropdownMenuItem(
