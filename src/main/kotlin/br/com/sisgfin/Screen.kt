@@ -21,4 +21,5 @@ sealed class Screen {
     object Contracts : Screen()
     object Clients : Screen()
     object Receivables : Screen()
+    object PayrollImport : Screen()
 }

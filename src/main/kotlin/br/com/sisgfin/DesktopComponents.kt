@@ -1,5 +1,6 @@
 package br.com.sisgfin
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,6 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import br.com.sisgfin.core.validation.DocumentValidator
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.MoneyFormatter
 import java.time.LocalDate
@@ -450,6 +452,215 @@ fun WsDateField(
                         if (digits.isEmpty()) {
                             Text(
                                 "dd/mm/aaaa",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = WsTextDisabled
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
+            }
+        )
+    }
+}
+
+// ── WsDocumentField — campo CPF / CNPJ com máscara e toggle de tipo ──────────
+
+enum class DocumentType(val label: String, val digitCount: Int, val placeholder: String) {
+    CPF ("CPF",  11, "000.000.000-00"),
+    CNPJ("CNPJ", 14, "00.000.000/0000-00")
+}
+
+private class CpfMaskTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val digits = text.text.take(11)
+        val out = buildString {
+            digits.forEachIndexed { i, c ->
+                if (i == 3 || i == 6) append('.')
+                if (i == 9) append('-')
+                append(c)
+            }
+        }
+        val mapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int = when {
+                offset <= 3  -> offset
+                offset <= 6  -> offset + 1
+                offset <= 9  -> offset + 2
+                else         -> minOf(offset + 3, out.length)
+            }
+            override fun transformedToOriginal(offset: Int): Int = when {
+                offset <= 3  -> offset
+                offset <= 7  -> offset - 1
+                offset <= 11 -> offset - 2
+                else         -> minOf(offset - 3, digits.length)
+            }
+        }
+        return TransformedText(AnnotatedString(out), mapping)
+    }
+}
+
+private class CnpjMaskTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val digits = text.text.take(14)
+        val out = buildString {
+            digits.forEachIndexed { i, c ->
+                if (i == 2 || i == 5) append('.')
+                if (i == 8) append('/')
+                if (i == 12) append('-')
+                append(c)
+            }
+        }
+        val mapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int = when {
+                offset <= 2  -> offset
+                offset <= 5  -> offset + 1
+                offset <= 8  -> offset + 2
+                offset <= 12 -> offset + 3
+                else         -> minOf(offset + 4, out.length)
+            }
+            override fun transformedToOriginal(offset: Int): Int = when {
+                offset <= 2  -> offset
+                offset <= 6  -> offset - 1
+                offset <= 10 -> offset - 2
+                offset <= 15 -> offset - 3
+                else         -> minOf(offset - 4, digits.length)
+            }
+        }
+        return TransformedText(AnnotatedString(out), mapping)
+    }
+}
+
+/**
+ * Campo de documento com máscara automática e toggle CPF / CNPJ.
+ * [value] deve conter apenas dígitos (sem pontuação) — o componente aplica a máscara visualmente.
+ * [stateKey] deve ser o ID do registro atual para que o tipo detectado redefina ao trocar de registro.
+ * [allowedTypes] com um único elemento oculta o toggle e fixa o tipo.
+ */
+@Composable
+fun WsDocumentField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    allowedTypes: Set<DocumentType> = setOf(DocumentType.CPF, DocumentType.CNPJ),
+    stateKey: Any? = Unit
+) {
+    val digits = value.filter { it.isDigit() }
+
+    var selectedType by remember(stateKey) {
+        mutableStateOf(
+            when {
+                digits.length == 14 && DocumentType.CNPJ in allowedTypes -> DocumentType.CNPJ
+                else -> allowedTypes.first()
+            }
+        )
+    }
+
+    val maxDigits = selectedType.digitCount
+    val isComplete = digits.length == maxDigits
+    val isError = isComplete && when (selectedType) {
+        DocumentType.CPF  -> !DocumentValidator.isValidCpf(digits)
+        DocumentType.CNPJ -> !DocumentValidator.isValidCnpj(digits)
+    }
+
+    val transformation: VisualTransformation = remember(selectedType) {
+        if (selectedType == DocumentType.CPF) CpfMaskTransformation() else CnpjMaskTransformation()
+    }
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                selectedType.label,
+                style = MaterialTheme.typography.labelMedium,
+                color = when {
+                    !enabled -> WsTextDisabled
+                    isError  -> WsDanger
+                    else     -> WsTextSecondary
+                }
+            )
+            if (isError) {
+                Text(
+                    "${selectedType.label} inválido",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = WsDanger
+                )
+            }
+            if (allowedTypes.size > 1) {
+                Spacer(Modifier.weight(1f))
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    DocumentType.entries.filter { it in allowedTypes }.forEach { type ->
+                        val selected = type == selectedType
+                        Surface(
+                            onClick = {
+                                if (!selected) {
+                                    selectedType = type
+                                    onValueChange("")
+                                }
+                            },
+                            shape = RoundedCornerShape(4.dp),
+                            color = if (selected) WsAccent else Color.Transparent,
+                            border = if (!selected) BorderStroke(1.dp, WsBorder) else null
+                        ) {
+                            Text(
+                                type.label,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (selected) Color.White else WsTextSecondary,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        val interaction = remember { MutableInteractionSource() }
+        val focused by interaction.collectIsFocusedAsState()
+        val borderColor = when {
+            isError -> WsDanger
+            focused -> WsAccent
+            else    -> WsBorder
+        }
+
+        BasicTextField(
+            value = digits.take(maxDigits),
+            onValueChange = { input ->
+                onValueChange(input.filter(Char::isDigit).take(maxDigits))
+            },
+            enabled = enabled,
+            singleLine = true,
+            visualTransformation = transformation,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = if (enabled) WsTextPrimary else WsTextSecondary
+            ),
+            cursorBrush = SolidColor(if (isError) WsDanger else WsAccent),
+            interactionSource = interaction,
+            decorationBox = { innerTextField ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(WsSize.control)
+                        .clip(RoundedCornerShape(WsRadius.md))
+                        .background(
+                            when {
+                                !enabled -> WsElevated
+                                isError  -> WsDanger.copy(alpha = 0.05f)
+                                else     -> WsBackground
+                            }
+                        )
+                        .border(1.dp, borderColor, RoundedCornerShape(WsRadius.md))
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(contentAlignment = Alignment.CenterStart, modifier = Modifier.fillMaxWidth()) {
+                        if (digits.isEmpty()) {
+                            Text(
+                                selectedType.placeholder,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = WsTextDisabled
                             )

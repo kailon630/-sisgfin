@@ -168,7 +168,11 @@ fun SupplierDetailsPanel(viewModel: SupplierViewModel, onClose: () -> Unit) {
         DetailSection("Dados Identificatórios") {
             WsTextField("NOME / RAZÃO SOCIAL", name) { name = it }
             WsTextField("NOME FANTASIA", tradeName) { tradeName = it }
-            WsTextField("DOCUMENTO (CPF/CNPJ)", document) { document = it }
+            WsDocumentField(
+                value = document,
+                onValueChange = { document = it },
+                stateKey = item.id
+            )
         }
         DetailSection("Contato") {
             WsTextField("E-MAIL", email) { email = it }
@@ -198,7 +202,11 @@ fun SupplierPopup(item: Supplier?, onSave: (Supplier) -> Unit, onCancel: () -> U
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 WsTextField("NOME", name) { name = it }
-                WsTextField("DOCUMENTO", document) { document = it }
+                WsDocumentField(
+                    value = document,
+                    onValueChange = { document = it },
+                    stateKey = item.id
+                )
                 HorizontalDivider(color = WsBorder)
                 Text("Dados Bancários", style = MaterialTheme.typography.labelMedium, color = WsTextSecondary)
                 WsTextField("BANCO", bank) { bank = it }

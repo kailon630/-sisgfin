@@ -21,5 +21,7 @@ enum class TimelineEventType(val displayLabel: String) {
     // Fase 6-D.5: conciliação manual
     RECONCILED("Conciliado com extrato OFX"),
     // Fase 7-A: recorrência automática
-    RECURRENCE_GENERATED("Gerado por recorrência")
+    RECURRENCE_GENERATED("Gerado por recorrência"),
+    // Fase 8-C: importação de folha de pagamento
+    PAYROLL_IMPORT("Importado via folha de pagamento")
 }

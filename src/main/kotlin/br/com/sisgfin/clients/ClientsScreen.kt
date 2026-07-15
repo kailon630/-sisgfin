@@ -154,7 +154,11 @@ fun ClientDetailsPanel(viewModel: ClientsViewModel, onClose: () -> Unit) {
         DetailSection("Dados Identificatórios") {
             WsTextField("NOME / RAZÃO SOCIAL", name) { name = it }
             WsTextField("NOME FANTASIA", tradeName) { tradeName = it }
-            WsTextField("DOCUMENTO (CPF/CNPJ)", document) { document = it }
+            WsDocumentField(
+                value = document,
+                onValueChange = { document = it },
+                stateKey = item.id
+            )
         }
         DetailSection("Tipo de Parceiro") {
             Text("PAPEL", style = MaterialTheme.typography.labelMedium, color = WsTextSecondary)

@@ -123,6 +123,14 @@ fun TransactionsScreen(
         }
     }
 
+    // Deep-link vindo da tela de importação OFX: abre o painel do lançamento diretamente.
+    val pendingDeepLink by viewModel.pendingDeepLink.collectAsState()
+    LaunchedEffect(pendingDeepLink) {
+        val tx = pendingDeepLink ?: return@LaunchedEffect
+        openPanel(tx)
+        viewModel.clearDeepLink()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()

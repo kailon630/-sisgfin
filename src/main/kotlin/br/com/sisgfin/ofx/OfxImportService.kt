@@ -6,6 +6,7 @@ import br.com.sisgfin.financial.transactions.TransactionService
 import br.com.sisgfin.financial.transactions.TransactionStatus
 import br.com.sisgfin.financial.transactions.TransactionType
 import java.io.File
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 class OfxImportService(
@@ -101,6 +102,19 @@ class OfxImportService(
                 .forEach { manual -> candidates.add(ConciliationCandidate(ofxTx, ofxTxId, manual)) }
         }
 
+        // Passo 6c: OFX sem par manual (não gerou candidato)
+        val matchedFitIds = candidates.map { it.ofxTx.fitId }.toSet()
+        val unmatchedOfx = statement.transactions
+            .filter { it.fitId in newTxIds && it.fitId !in matchedFitIds }
+            .map { UnmatchedOfxEntry(it, newTxIds[it.fitId]!!) }
+
+        // Passo 6d: lançamentos manuais no período sem conciliação
+        val unmatchedManual = runCatching {
+            transactionService.findPendingInPeriodWithoutReconciliation(
+                accountId, statement.dtStart, statement.dtEnd
+            )
+        }.getOrElse { emptyList() }
+
         // Passo 7: registro do log de importação
         runCatching {
             ofxImportRepository.insert(
@@ -122,12 +136,14 @@ class OfxImportService(
 
         // Passo 8: resultado
         return OfxImportResult(
-            newCount       = newCount,
-            duplicateCount = duplicateCount,
-            errorCount     = errorCount,
-            errors         = errors,
-            warnings       = warnings,
-            candidates     = candidates
+            newCount        = newCount,
+            duplicateCount  = duplicateCount,
+            errorCount      = errorCount,
+            errors          = errors,
+            warnings        = warnings,
+            candidates      = candidates,
+            unmatchedOfx    = unmatchedOfx,
+            unmatchedManual = unmatchedManual
         )
     }
 

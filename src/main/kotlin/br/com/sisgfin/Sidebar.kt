@@ -4,7 +4,9 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.outlined.ShowChart
@@ -86,8 +88,9 @@ fun Sidebar(
         Spacer(Modifier.height(20.dp))
 
         // ── Itens de navegação ───────────────────────────────────────────────
+        val scrollState = rememberScrollState()
         Column(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(2.dp),
             horizontalAlignment = if (isExpanded) Alignment.Start else Alignment.CenterHorizontally
         ) {
@@ -212,6 +215,13 @@ fun Sidebar(
                 selected = currentScreen is Screen.Employees,
                 expanded = isExpanded
             ) { onNavigate(Screen.Employees) }
+
+            SidebarItem(
+                icon     = Icons.Outlined.UploadFile,
+                label    = "Importar Folha",
+                selected = currentScreen is Screen.PayrollImport,
+                expanded = isExpanded
+            ) { onNavigate(Screen.PayrollImport) }
 
             if (isAdmin) {
                 SidebarItem(

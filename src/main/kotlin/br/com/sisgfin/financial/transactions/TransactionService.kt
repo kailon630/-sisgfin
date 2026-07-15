@@ -20,6 +20,7 @@ import br.com.sisgfin.financial.transactions.workflow.OverdueEngine
 import br.com.sisgfin.financial.transactions.workflow.TransactionStateMachine
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.YearMonth
 
 class TransactionService(
     private val repository: TransactionRepository,
@@ -445,6 +446,42 @@ class TransactionService(
     }
 
     /**
+     * Cria um lançamento originado de importação de folha de pagamento (Fase 8-C).
+     * Análogo a [createFromOfx]: status PENDING direto, sem parcelamento, sem validação de fornecedor
+     * (já verificado no vínculo Employee → Supplier). Timeline marcada como PAYROLL_IMPORT.
+     */
+    fun createFromPayrollImport(tx: Transaction): Int {
+        val userId = sessionManager.currentUser.value?.id ?: tx.createdBy
+        val now = LocalDateTime.now()
+        val prepared = tx.copy(id = 0, createdBy = userId, createdAt = now, updatedAt = now)
+        validateAccount(prepared.accountId)
+        val id = repository.insert(prepared)
+        addTimeline(id, TimelineEventType.PAYROLL_IMPORT,
+            "Importado via folha de pagamento — funcionário #${tx.employeeId}",
+            prepared.amount, null, prepared.status)
+        audit("TRANSACTION_CREATED", id, auditDetail(prepared.status, null, prepared.amount))
+        return id
+    }
+
+    /**
+     * Cancela lançamentos PENDING/DRAFT/SCHEDULED do funcionário dentro do mês de referência
+     * e do mês seguinte. Chamado antes de criar os lançamentos da importação para evitar duplicatas
+     * com os gerados pelo [PayrollEngine] (que usa salário fixo, não o valor real da folha).
+     */
+    fun cancelPendingPayrollForMonth(employeeId: Int, month: YearMonth): Int {
+        val toCancel = repository.findPendingPayrollForMonth(employeeId, month)
+        toCancel.forEach { tx ->
+            repository.deactivate(tx.id)
+            val monthLabel = "${month.monthValue.toString().padStart(2, '0')}/${month.year}"
+            addTimeline(tx.id, TimelineEventType.CANCELED,
+                "Cancelado — substituído por importação de folha de pagamento $monthLabel",
+                null, tx.status, TransactionStatus.CANCELED)
+            audit("TRANSACTION_CANCELED", tx.id, auditDetail(TransactionStatus.CANCELED, tx.status, tx.amount))
+        }
+        return toCancel.size
+    }
+
+    /**
      * Cria um lançamento gerado pelo motor de recorrência (Fase 7-A).
      * Difere de [create]: sem enforcement de parcelamento, sem validação de fornecedor,
      * status sempre PENDING, timeline marcado como RECURRENCE_GENERATED.
@@ -482,6 +519,13 @@ class TransactionService(
             from      = date.minusDays(3),
             to        = date.plusDays(3)
         ).filter { it.ofxFitId == null }
+
+    fun findPendingInPeriodWithoutReconciliation(
+        accountId: Int,
+        from: LocalDate,
+        to: LocalDate
+    ): List<Transaction> =
+        repository.findPendingInPeriodWithoutReconciliation(accountId, from, to)
 
     /**
      * Concilia um lançamento manual com um lançamento OFX importado.

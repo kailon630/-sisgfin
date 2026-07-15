@@ -42,13 +42,23 @@ data class ConciliationCandidate(
     val manualTx: Transaction
 )
 
+/** Lançamento OFX importado sem nenhum par manual candidato — já é PAID mas sem contexto. */
+data class UnmatchedOfxEntry(
+    val ofxTx: OfxTransaction,
+    val txId: Int
+)
+
 data class OfxImportResult(
     val newCount: Int,
     val duplicateCount: Int,
     val errorCount: Int,
     val errors: List<String> = emptyList(),
     val warnings: List<String> = emptyList(),
-    val candidates: List<ConciliationCandidate> = emptyList()
+    val candidates: List<ConciliationCandidate> = emptyList(),
+    /** Lançamentos OFX sem par manual — disponíveis para detalhar descrição/fornecedor. */
+    val unmatchedOfx: List<UnmatchedOfxEntry> = emptyList(),
+    /** Lançamentos manuais PENDING/OVERDUE no período do extrato que não foram conciliados. */
+    val unmatchedManual: List<Transaction> = emptyList()
 ) {
     val totalProcessed: Int    get() = newCount + duplicateCount + errorCount
     val hasErrors: Boolean     get() = errorCount > 0

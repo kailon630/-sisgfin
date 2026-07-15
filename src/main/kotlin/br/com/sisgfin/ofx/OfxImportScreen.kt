@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import br.com.sisgfin.*
 import br.com.sisgfin.financial.money.MoneyFormatter
+import br.com.sisgfin.financial.transactions.Transaction
 import br.com.sisgfin.financial.transactions.TransactionStatus
 import br.com.sisgfin.financial.transactions.TransactionType
 import java.time.format.DateTimeFormatter
@@ -38,7 +39,8 @@ private val dateTimeFmt = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
 @Composable
 fun OfxImportScreen(
     viewModel: OfxImportViewModel,
-    onNavigateToStatement: () -> Unit
+    onNavigateToStatement: () -> Unit,
+    onNavigateToManualTx: (Transaction) -> Unit
 ) {
     val step            by viewModel.step.collectAsState()
     val accounts        by viewModel.accounts.collectAsState()
@@ -46,6 +48,7 @@ fun OfxImportScreen(
     val isLoading       by viewModel.isLoading.collectAsState()
     val importHistory   by viewModel.importHistory.collectAsState()
     val errorMessage    by viewModel.errorMessage.collectAsState()
+    val suppliers       by viewModel.suppliers.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.loadAccounts()
@@ -93,9 +96,14 @@ fun OfxImportScreen(
 
             is OfxImportViewModel.Step.Done ->
                 DoneStep(
-                    result              = s.result,
-                    onNewImport         = { viewModel.reset() },
-                    onNavigateToStatement = onNavigateToStatement
+                    result                = s.result,
+                    suppliers             = suppliers,
+                    onNewImport           = { viewModel.reset() },
+                    onNavigateToStatement = onNavigateToStatement,
+                    onNavigateToManualTx  = onNavigateToManualTx,
+                    onQuickEdit           = { txId, desc, supId ->
+                        viewModel.quickEditOfxEntry(txId, desc, supId)
+                    }
                 )
         }
     }
@@ -588,8 +596,11 @@ private fun ConciliationCandidateCard(
 @Composable
 private fun DoneStep(
     result: OfxImportResult,
+    suppliers: List<Supplier>,
     onNewImport: () -> Unit,
-    onNavigateToStatement: () -> Unit
+    onNavigateToStatement: () -> Unit,
+    onNavigateToManualTx: (Transaction) -> Unit,
+    onQuickEdit: (txId: Int, description: String, supplierId: Int?) -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -614,24 +625,10 @@ private fun DoneStep(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.widthIn(max = 560.dp)
         ) {
-            ResultStatCard(
-                label = "Importados",
-                value = result.newCount.toString(),
-                color = WsSuccess,
-                modifier = Modifier.weight(1f)
-            )
-            ResultStatCard(
-                label = "Já existiam",
-                value = result.duplicateCount.toString(),
-                color = WsWarning,
-                modifier = Modifier.weight(1f)
-            )
-            ResultStatCard(
-                label = "Erros",
-                value = result.errorCount.toString(),
-                color = if (result.hasErrors) WsDanger else WsTextDisabled,
-                modifier = Modifier.weight(1f)
-            )
+            ResultStatCard("Importados",  result.newCount.toString(),       WsSuccess,     Modifier.weight(1f))
+            ResultStatCard("Já existiam", result.duplicateCount.toString(), WsWarning,     Modifier.weight(1f))
+            ResultStatCard("Erros",       result.errorCount.toString(),
+                if (result.hasErrors) WsDanger else WsTextDisabled, Modifier.weight(1f))
         }
 
         // Avisos de ACCTID
@@ -660,38 +657,292 @@ private fun DoneStep(
                 modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        "Lançamentos com erro (${result.errorCount})",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = WsDanger
-                    )
+                    Text("Lançamentos com erro (${result.errorCount})",
+                        style = MaterialTheme.typography.labelMedium, color = WsDanger)
                     result.errors.take(10).forEach { e ->
                         Text(e, style = MaterialTheme.typography.labelSmall, color = WsTextSecondary)
                     }
                     if (result.errors.size > 10) {
-                        Text(
-                            "… e mais ${result.errors.size - 10} erros",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = WsTextDisabled
-                        )
+                        Text("… e mais ${result.errors.size - 10} erros",
+                            style = MaterialTheme.typography.labelSmall, color = WsTextDisabled)
                     }
                 }
             }
         }
 
-        // Ações
+        // Ações principais
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            WsButton(
-                text = "Nova importação",
-                icon = Icons.Default.Refresh,
-                variant = WsButtonVariant.SECONDARY,
-                onClick = onNewImport
+            WsButton(text = "Nova importação", icon = Icons.Default.Refresh,
+                variant = WsButtonVariant.SECONDARY, onClick = onNewImport)
+            WsButton(text = "Ver no extrato", icon = Icons.Default.ArrowForward, onClick = onNavigateToStatement)
+        }
+
+        // ── Entradas sem previsão ─────────────────────────────────────────────
+        if (result.unmatchedOfx.isNotEmpty()) {
+            UnmatchedOfxSection(
+                entries   = result.unmatchedOfx,
+                suppliers = suppliers,
+                onSave    = onQuickEdit
             )
-            WsButton(
-                text    = "Ver no extrato",
-                icon    = Icons.Default.ArrowForward,
-                onClick = onNavigateToStatement
+        }
+
+        // ── Previsões não liquidadas ──────────────────────────────────────────
+        if (result.unmatchedManual.isNotEmpty()) {
+            UnmatchedManualSection(
+                transactions = result.unmatchedManual,
+                onNavigate   = onNavigateToManualTx
             )
+        }
+    }
+}
+
+// ── Seção: Entradas OFX sem previsão ─────────────────────────────────────────
+
+@Composable
+private fun UnmatchedOfxSection(
+    entries: List<UnmatchedOfxEntry>,
+    suppliers: List<Supplier>,
+    onSave: (txId: Int, description: String, supplierId: Int?) -> Unit
+) {
+    var editingEntry by remember { mutableStateOf<UnmatchedOfxEntry?>(null) }
+    var savedIds     by remember { mutableStateOf(setOf<Int>()) }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Surface(color = WsWarning.copy(alpha = 0.15f), shape = RoundedCornerShape(4.dp)) {
+                Text(
+                    "${entries.size}",
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = WsWarning,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Text(
+                "Entradas sem previsão — não havia lançamento manual correspondente",
+                style = MaterialTheme.typography.titleSmall, color = WsTextPrimary
+            )
+        }
+        Text(
+            "Estes lançamentos foram importados como PAGO. Clique em Detalhar para adicionar descrição e fornecedor.",
+            style = MaterialTheme.typography.bodyMedium, color = WsTextSecondary
+        )
+
+        entries.forEach { entry ->
+            val done = entry.txId in savedIds
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(1.dp, if (done) WsSuccess.copy(alpha = 0.4f) else WsBorder, RoundedCornerShape(8.dp))
+                    .background(if (done) WsSuccess.copy(alpha = 0.04f) else WsSurface)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            entry.ofxTx.memo.ifBlank { "Sem descrição" },
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            entry.ofxTx.date.format(dateFmt),
+                            style = MaterialTheme.typography.bodyMedium, color = WsTextSecondary
+                        )
+                    }
+                    Text(
+                        MoneyFormatter.format(entry.ofxTx.amount.abs()),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (entry.ofxTx.isInflow) WsSuccess else WsDanger
+                    )
+                    if (done) {
+                        Icon(Icons.Default.CheckCircle, null, tint = WsSuccess, modifier = Modifier.size(18.dp))
+                    } else {
+                        WsButton(
+                            text    = "Detalhar",
+                            icon    = Icons.Default.Edit,
+                            variant = WsButtonVariant.SECONDARY,
+                            onClick = { editingEntry = entry }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    editingEntry?.let { entry ->
+        OFXQuickEditModal(
+            entry     = entry,
+            suppliers = suppliers,
+            onSave    = { desc, supId ->
+                onSave(entry.txId, desc, supId)
+                savedIds = savedIds + entry.txId
+                editingEntry = null
+            },
+            onCancel  = { editingEntry = null }
+        )
+    }
+}
+
+@Composable
+private fun OFXQuickEditModal(
+    entry: UnmatchedOfxEntry,
+    suppliers: List<Supplier>,
+    onSave: (description: String, supplierId: Int?) -> Unit,
+    onCancel: () -> Unit
+) {
+    var description by remember(entry.txId) { mutableStateOf(entry.ofxTx.memo) }
+    var supplierId  by remember(entry.txId) { mutableStateOf<Int?>(null) }
+
+    val supplierOptions = remember(suppliers) { suppliers.map { it.id to it.name } }
+    val selectedSupplierIdx = supplierId?.let { id -> suppliers.indexOfFirst { it.id == id }.takeIf { it >= 0 } }
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        shape            = RoundedCornerShape(8.dp),
+        containerColor   = WsSurface,
+        properties       = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        modifier         = Modifier.width(520.dp),
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Detalhar lançamento", style = MaterialTheme.typography.titleLarge)
+                Surface(
+                    color = WsElevated, shape = RoundedCornerShape(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            entry.ofxTx.date.format(dateFmt),
+                            style = MaterialTheme.typography.bodyMedium, color = WsTextSecondary
+                        )
+                        Text(
+                            MoneyFormatter.format(entry.ofxTx.amount.abs()),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = if (entry.ofxTx.isInflow) WsSuccess else WsDanger
+                        )
+                    }
+                }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 8.dp)) {
+                WsTextField("DESCRIÇÃO", description) { description = it }
+                WsSelectField(
+                    label       = "FORNECEDOR",
+                    options     = supplierOptions,
+                    selectedId  = selectedSupplierIdx,
+                    onSelect    = { idx -> supplierId = idx?.let { suppliers[it].id } },
+                    placeholder = "Selecionar fornecedor...",
+                    nullable    = true
+                )
+            }
+        },
+        confirmButton = {
+            WsButton("Salvar", onClick = { onSave(description.trim().ifBlank { entry.ofxTx.memo }, supplierId) })
+        },
+        dismissButton = {
+            WsButton("Cancelar", variant = WsButtonVariant.TERTIARY, onClick = onCancel)
+        }
+    )
+}
+
+// ── Seção: Previsões não liquidadas ──────────────────────────────────────────
+
+@Composable
+private fun UnmatchedManualSection(
+    transactions: List<Transaction>,
+    onNavigate: (Transaction) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Surface(color = WsDanger.copy(alpha = 0.12f), shape = RoundedCornerShape(4.dp)) {
+                Text(
+                    "${transactions.size}",
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = WsDanger,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Text(
+                "Previsões não liquidadas — lançamentos manuais sem entrada no extrato",
+                style = MaterialTheme.typography.titleSmall, color = WsTextPrimary
+            )
+        }
+        Text(
+            "Estes lançamentos estavam previstos no período mas não aparecem no extrato bancário.",
+            style = MaterialTheme.typography.bodyMedium, color = WsTextSecondary
+        )
+
+        transactions.forEach { tx ->
+            val statusColor = when (tx.status) {
+                TransactionStatus.OVERDUE -> WsDanger
+                else                      -> WsWarning
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(1.dp, WsBorder, RoundedCornerShape(8.dp))
+                    .background(WsSurface)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            tx.description,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "Venc. ${tx.dueDate.toLocalDate().format(dateFmt)}",
+                                style = MaterialTheme.typography.bodyMedium, color = WsTextSecondary
+                            )
+                            Surface(color = statusColor.copy(alpha = 0.12f), shape = RoundedCornerShape(3.dp)) {
+                                Text(
+                                    tx.status.displayName,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = statusColor
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        MoneyFormatter.format(tx.amount),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (tx.type == TransactionType.INCOME) WsSuccess else WsDanger
+                    )
+                    WsButton(
+                        text    = "Ver lançamento",
+                        icon    = Icons.Default.OpenInNew,
+                        variant = WsButtonVariant.SECONDARY,
+                        onClick = { onNavigate(tx) }
+                    )
+                }
+            }
         }
     }
 }

@@ -9,6 +9,7 @@ import br.com.sisgfin.employees.EmployeeViewModel
 import br.com.sisgfin.financial.categories.ExpenseCategoryViewModel
 import br.com.sisgfin.financial.transactions.TransactionsViewModel
 import br.com.sisgfin.ofx.OfxImportViewModel
+import br.com.sisgfin.payroll.PayrollImportViewModel
 import br.com.sisgfin.presentation.viewmodel.LoginViewModel
 import br.com.sisgfin.projects.CostCenterViewModel
 import br.com.sisgfin.clients.ClientsViewModel
@@ -38,7 +39,18 @@ val viewModelModule = module {
     factory { BudgetViewModel(get(), get(), get()) }
     factory { ReportsViewModel(get(), get(), get(), get(), get(), get()) }
     factory { CashFlowViewModel(get(), get(), get()) }
-    factory { OfxImportViewModel(get(), get(), get(), get(), get(), get()) }
+    factory { OfxImportViewModel(get(), get(), get(), get(), get(), get(), get()) }
     factory { ClientsViewModel(get(), get()) }
     factory { ReceivablesViewModel(get(), get()) }
+    factory {
+        PayrollImportViewModel(
+            get(), // PayrollImportService
+            get(), // FinancialAccountRepository
+            get(), // ExpenseCategoryRepository
+            get(), // CostCenterRepository
+            get(), // SessionManager
+            get(), // EmployeeService
+            get()  // EmployeeRepository
+        )
+    }
 }

@@ -7,6 +7,7 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.YearMonth
 
 class TransactionRepository : MutableEntityRepository<Transaction> {
 
@@ -529,6 +530,27 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             .count().toInt()
     }
 
+    fun findPendingInPeriodWithoutReconciliation(
+        accountId: Int,
+        from: LocalDate,
+        to: LocalDate
+    ): List<Transaction> = transaction {
+        val fromDt = from.atStartOfDay()
+        val toDt   = to.plusDays(1).atStartOfDay()
+        val openStatuses = listOf(TransactionStatus.PENDING.name, TransactionStatus.OVERDUE.name)
+        FinancialTransactionsTable.selectAll()
+            .where {
+                (FinancialTransactionsTable.accountId eq accountId) and
+                (FinancialTransactionsTable.isActive eq true) and
+                (FinancialTransactionsTable.status inList openStatuses) and
+                (FinancialTransactionsTable.ofxFitId.isNull()) and
+                (FinancialTransactionsTable.reconciledWithFitId.isNull()) and
+                (FinancialTransactionsTable.dueDate greaterEq fromDt) and
+                (FinancialTransactionsTable.dueDate less toDt)
+            }
+            .map { rowToTransaction(it) }
+    }
+
     // Fluxo de Caixa: todos os não-pagos (OVERDUE sempre + PENDING/PARTIAL/SCHEDULED até windowEnd)
     fun findUnpaid(windowEnd: java.time.LocalDate, accountId: Int? = null): List<Transaction> = transaction {
         val windowEndDt = windowEnd.plusDays(1).atStartOfDay()
@@ -636,6 +658,26 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             }
             .orderBy(FinancialTransactionsTable.dueDate to SortOrder.DESC)
             .limit(10)
+            .map { rowToTransaction(it) }
+    }
+
+    // Fase 8-C: retorna lançamentos canceláveis de um funcionário dentro do mês de referência e seguinte
+    fun findPendingPayrollForMonth(employeeId: Int, month: YearMonth): List<Transaction> = transaction {
+        val from = month.atDay(1).atStartOfDay()
+        val to = month.plusMonths(2).atDay(1).atStartOfDay()
+        val cancelable = listOf(
+            TransactionStatus.PENDING.name,
+            TransactionStatus.DRAFT.name,
+            TransactionStatus.SCHEDULED.name
+        )
+        FinancialTransactionsTable.selectAll()
+            .where {
+                (FinancialTransactionsTable.employeeId eq employeeId) and
+                (FinancialTransactionsTable.status inList cancelable) and
+                (FinancialTransactionsTable.isActive eq true) and
+                (FinancialTransactionsTable.dueDate greaterEq from) and
+                (FinancialTransactionsTable.dueDate less to)
+            }
             .map { rowToTransaction(it) }
     }
 

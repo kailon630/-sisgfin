@@ -3,6 +3,8 @@ package br.com.sisgfin.ofx
 import br.com.sisgfin.FinancialAccount
 import br.com.sisgfin.FinancialAccountRepository
 import br.com.sisgfin.SessionManager
+import br.com.sisgfin.Supplier
+import br.com.sisgfin.SupplierRepository
 import br.com.sisgfin.financial.transactions.TransactionService
 import br.com.sisgfin.presentation.viewmodel.BaseViewModel
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +23,8 @@ class OfxImportViewModel(
     private val ofxImportRepository: OfxImportRepository,
     private val accountRepository: FinancialAccountRepository,
     private val sessionManager: SessionManager,
-    private val transactionService: TransactionService
+    private val transactionService: TransactionService,
+    private val supplierRepository: SupplierRepository
 ) : BaseViewModel() {
 
     sealed class Step {
@@ -61,9 +64,34 @@ class OfxImportViewModel(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private val _suppliers = MutableStateFlow<List<Supplier>>(emptyList())
+    val suppliers: StateFlow<List<Supplier>> = _suppliers.asStateFlow()
+
     init {
         loadAccounts()
         loadHistory()
+        loadSuppliers()
+    }
+
+    fun loadSuppliers() {
+        viewModelScope.launch {
+            _suppliers.value = withContext(Dispatchers.IO) {
+                supplierRepository.findAll().filter { it.isActive }
+            }
+        }
+    }
+
+    fun quickEditOfxEntry(txId: Int, description: String, supplierId: Int?) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val tx = transactionService.findById(txId) ?: return@withContext
+                    transactionService.update(tx.copy(description = description, supplierId = supplierId))
+                }
+            }
+            _isLoading.value = false
+        }
     }
 
     fun loadAccounts() {

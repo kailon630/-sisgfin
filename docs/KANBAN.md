@@ -211,32 +211,32 @@ _Mova os cards aqui quando começar._
 
 ---
 
-### Fase 7-A — Recorrência Automática
+### ✅ Fase 7-A — Recorrência Automática
 
 > Objetivo: o operador cadastra uma vez uma despesa ou receita recorrente (aluguel, assinatura, mensalidade de associado) e o sistema gera automaticamente os lançamentos mês a mês — sem prazo fixo, sem lançar na mão. Segue o mesmo padrão do `PayrollEngine` já existente.
 
 #### 7-A.1 — Modelo e Persistência
 
-- [ ] **`RecurrenceInterval` enum** — `recurrence/RecurrenceInterval.kt`; valores: `DIARIO`, `SEMANAL`, `QUINZENAL`, `MENSAL`, `BIMESTRAL`, `TRIMESTRAL`, `SEMESTRAL`, `ANUAL`; campo `displayName` para UI
-- [ ] **Entidade `RecurrenceTemplate`** — `recurrence/RecurrenceTemplate.kt`; campos: `id`, `description`, `amount: Money`, `type: TransactionType`, `interval: RecurrenceInterval`, `dayOfMonth: Int`, `accountId`, `supplierId?`, `categoryId?`, `costCenterId?`, `documentType?`, `notes?`, `startsAt: LocalDate`, `endsAt: LocalDate?`, `isActive`, `createdBy?`, `createdAt`, `updatedAt`
-- [ ] **`RecurrenceTemplatesTable`** — `recurrence/RecurrenceTemplatesTable.kt` + `V19__recurrence_templates.sql`; FK para `financial_accounts`, `suppliers`, `expense_categories`, `projects`
-- [ ] **Campo `recurrence_template_id` em `financial_transactions`** — `V20__transaction_recurrence_fk.sql`; coluna `INTEGER NULL`; atualizar `FinancialTransactionsTable`, `Transaction` (campo `recurrenceTemplateId: Int?`), `TransactionRepository` (`insert`, `update`, `rowToTransaction`)
-- [ ] **`RecurrenceTemplateRepository`** — CRUD completo + `findAllActive()` + `existsGeneratedFor(templateId: Int, dueDate: LocalDate): Boolean` (consulta `financial_transactions` por `recurrence_template_id` + janela do dia para deduplicação)
+- [x] **`RecurrenceInterval` enum** — `recurrence/RecurrenceInterval.kt`; valores: `DIARIO`, `SEMANAL`, `QUINZENAL`, `MENSAL`, `BIMESTRAL`, `TRIMESTRAL`, `SEMESTRAL`, `ANUAL`; campo `displayName` para UI
+- [x] **Entidade `RecurrenceTemplate`** — `recurrence/RecurrenceTemplate.kt`; campos: `id`, `description`, `amount: Money`, `type: TransactionType`, `interval: RecurrenceInterval`, `dayOfMonth: Int`, `accountId`, `supplierId?`, `categoryId?`, `costCenterId?`, `documentType?`, `notes?`, `startsAt: LocalDate`, `endsAt: LocalDate?`, `isActive`, `createdBy?`, `createdAt`, `updatedAt`
+- [x] **`RecurrenceTemplatesTable`** — `recurrence/RecurrenceTemplatesTable.kt` + `V19__recurrence_templates.sql`; FK para `financial_accounts`, `suppliers`, `expense_categories`, `projects`
+- [x] **Campo `recurrence_template_id` em `financial_transactions`** — `V20__transaction_recurrence_fk.sql`; coluna `INTEGER NULL`; atualizar `FinancialTransactionsTable`, `Transaction` (campo `recurrenceTemplateId: Int?`), `TransactionRepository` (`insert`, `update`, `rowToTransaction`)
+- [x] **`RecurrenceTemplateRepository`** — CRUD completo + `findAllActive()` + `existsGeneratedFor(templateId: Int, dueDate: LocalDate): Boolean` (consulta `financial_transactions` por `recurrence_template_id` + janela do dia para deduplicação)
 
 #### 7-A.2 — Motor de Geração
 
-- [ ] **`RecurrenceEngine.generateAhead(monthsAhead: Int = 2)`** — `recurrence/RecurrenceEngine.kt`; itera todos os templates ativos; calcula as próximas datas até `now + monthsAhead`; para cada data: `existsGeneratedFor()` → pula se já existe; cria `Transaction(status=PENDING, recurrenceTemplateId=template.id)` via `TransactionService.createFromRecurrence()` (novo método sem enforcement de parcelamento e sem `PAID` forçado); registra `TimelineEventType.RECURRENCE_GENERATED` na timeline
-- [ ] **`RecurrenceEngine.generateForTemplate(id)`** — sobrecarga individual; chamada imediatamente ao salvar/reativar um template
-- [ ] **Cálculo de datas por intervalo** — `RecurrenceDateCalculator.kt`; respeita `dayOfMonth` mas ajusta para último dia do mês quando necessário (ex: dia 31 em fevereiro → 28/29); edge cases: dia 29/30/31 em meses curtos
-- [ ] **Gatilhos de geração** — `Main.kt`: dispara `generateAhead(2)` em `CoroutineScope(Dispatchers.IO)` na abertura (mesmo padrão do `PayrollEngine`); `RecurrenceTemplateService.save()` e `toggleActive()` chamam `generateForTemplate(id)` ao ativar
-- [ ] **Testes unitários `RecurrenceEngineTest`** — geração mensal correta; deduplicação (não gera duplicata); bimestral/semestral; edge case dia 31 em meses curtos; `endsAt` respeitado; `generateAhead(0)` não gera nada; template inativo ignorado
+- [x] **`RecurrenceEngine.generateAhead(monthsAhead: Int = 2)`** — `recurrence/RecurrenceEngine.kt`; itera todos os templates ativos; calcula as próximas datas até `now + monthsAhead`; para cada data: `existsGeneratedFor()` → pula se já existe; cria `Transaction(status=PENDING, recurrenceTemplateId=template.id)` via `TransactionService.createFromRecurrence()` (novo método sem enforcement de parcelamento e sem `PAID` forçado); registra `TimelineEventType.RECURRENCE_GENERATED` na timeline
+- [x] **`RecurrenceEngine.generateForTemplate(id)`** — sobrecarga individual; chamada imediatamente ao salvar/reativar um template
+- [x] **Cálculo de datas por intervalo** — `RecurrenceDateCalculator.kt`; respeita `dayOfMonth` mas ajusta para último dia do mês quando necessário (ex: dia 31 em fevereiro → 28/29); edge cases: dia 29/30/31 em meses curtos
+- [x] **Gatilhos de geração** — `Main.kt`: dispara `generateAhead(2)` em `CoroutineScope(Dispatchers.IO)` na abertura (mesmo padrão do `PayrollEngine`); `RecurrenceTemplateService.save()` e `toggleActive()` chamam `generateForTemplate(id)` ao ativar
+- [x] **Testes unitários `RecurrenceEngineTest`** — geração mensal correta; deduplicação (não gera duplicata); bimestral/semestral; edge case dia 31 em meses curtos; `endsAt` respeitado; `generateAhead(0)` não gera nada; template inativo ignorado
 
 #### 7-A.3 — UI
 
-- [ ] **Tela `RecurringScreen`** — `recurrence/RecurringScreen.kt`; lista de templates com colunas: Descrição / Tipo / Intervalo / Próx. Vencimento / Conta / Status; badge colorido por tipo (Receita/Despesa); botões "+ Recorrência Despesa" e "+ Recorrência Receita"; sidebar item "Recorrências" no grupo FINANCEIRO
-- [ ] **Painel de detalhes do template** — `RecurringDetailsPanel.kt`; campos completos editáveis; seção "Histórico Gerado" listando as últimas transações geradas pelo template (filtro `recurrenceTemplateId`); badge do próximo vencimento a gerar
-- [ ] **Toggle "Recorrente" no `TransactionDetailsPanel`** — checkbox ou switch "Tornar recorrente" que expande seção com: intervalo (`WsSelectField`), dia do mês, data de encerramento (opcional); ao salvar com recorrência ativa, cria `RecurrenceTemplate` e preenche `recurrenceTemplateId` na transação; visível apenas na criação (não na edição de transação já gerada)
-- [ ] **Cancelamento de recorrência** — no painel do template: botão "Pausar" (desativa template, preserva gerados); botão "Cancelar Futuras" (`WsButton` com cor `WsDanger`): desativa template + cancela todos `PENDING/DRAFT` com `recurrenceTemplateId` igual (cascata controlada); confirmação via `ConfirmDialog` antes de executar
+- [x] **Tela `RecurringScreen`** — `recurrence/RecurringScreen.kt`; lista de templates com colunas: Descrição / Tipo / Intervalo / Próx. Vencimento / Conta / Status; badge colorido por tipo (Receita/Despesa); botões "+ Recorrência Despesa" e "+ Recorrência Receita"; sidebar item "Recorrências" no grupo FINANCEIRO
+- [x] **Painel de detalhes do template** — `RecurringDetailsPanel.kt`; campos completos editáveis; seção "Histórico Gerado" listando as últimas transações geradas pelo template (filtro `recurrenceTemplateId`); badge do próximo vencimento a gerar
+- [x] **Toggle "Recorrente" no `TransactionDetailsPanel`** — checkbox ou switch "Tornar recorrente" que expande seção com: intervalo (`WsSelectField`), dia do mês, data de encerramento (opcional); ao salvar com recorrência ativa, cria `RecurrenceTemplate` e preenche `recurrenceTemplateId` na transação; visível apenas na criação (não na edição de transação já gerada)
+- [x] **Cancelamento de recorrência** — no painel do template: botão "Pausar" (desativa template, preserva gerados); botão "Cancelar Futuras" (`WsButton` com cor `WsDanger`): desativa template + cancela todos `PENDING/DRAFT` com `recurrenceTemplateId` igual (cascata controlada); confirmação via `ConfirmDialog` antes de executar
 
 ---
 
@@ -268,36 +268,156 @@ _Mova os cards aqui quando começar._
 
 ---
 
-### Fase 7-C — Clientes e Recebíveis
+### ✅ Fase 7-C — Clientes e Recebíveis
 
 > Objetivo: registrar clientes (contraparte de receitas), vincular transações INCOME a clientes e ter uma tela de contas a receber com aging — espelho do que já existe para despesas/fornecedores.
 
 #### 7-C.1 — Modelo: Parceiros Comerciais
 
-- [ ] **`EntityType` enum** — `suppliers/EntityType.kt`; valores: `FORNECEDOR`, `CLIENTE`, `AMBOS`; `displayName` para UI
-- [ ] **`V23__supplier_entity_type.sql`** — adiciona coluna `entity_type VARCHAR(20) NOT NULL DEFAULT 'FORNECEDOR'` em `suppliers`; `UPDATE suppliers SET entity_type = 'FORNECEDOR'` para dados existentes
-- [ ] **Modelo `Supplier` atualizado** — campo `entityType: EntityType = EntityType.FORNECEDOR`; `Suppliers` table com a nova coluna; `SupplierRepository`: `findByType(type)`, `findSuppliers()` (FORNECEDOR+AMBOS), `findClients()` (CLIENTE+AMBOS); `findAll()` sem filtro para compatibilidade
-- [ ] **`SupplierService` atualizado** — proteger `save()`: não permite remover papel CLIENTE se existirem transações INCOME vinculadas (e vice-versa para FORNECEDOR)
+- [x] **`EntityType` enum** — `suppliers/EntityType.kt`; valores: `FORNECEDOR`, `CLIENTE`, `AMBOS`; `displayName` para UI
+- [x] **`V23__supplier_entity_type.sql`** — adiciona coluna `entity_type VARCHAR(20) NOT NULL DEFAULT 'FORNECEDOR'` em `suppliers`; `UPDATE suppliers SET entity_type = 'FORNECEDOR'` para dados existentes
+- [x] **Modelo `Supplier` atualizado** — campo `entityType: EntityType = EntityType.FORNECEDOR`; `Suppliers` table com a nova coluna; `SupplierRepository`: `findByType(type)`, `findSuppliers()` (FORNECEDOR+AMBOS), `findClients()` (CLIENTE+AMBOS); `findAll()` sem filtro para compatibilidade
+- [x] **`SupplierService` atualizado** — proteger `save()`: não permite remover papel CLIENTE se existirem transações INCOME vinculadas (e vice-versa para FORNECEDOR)
 
 #### 7-C.2 — Tela de Clientes
 
-- [ ] **`ClientsScreen`** — `clients/ClientsScreen.kt`; reutiliza exatamente os composables de `SupplierManagementScreen` (sem duplicar lógica); diferença: título "Clientes", `viewModel.load()` chama `findClients()`; painel de detalhes com campo `entityType` pré-selecionado em CLIENTE
-- [ ] **Tela de Fornecedores ajustada** — `SupplierManagementScreen`: `SupplierViewModel.load()` passa a chamar `findSuppliers()` em vez de `findAll()` para filtrar apenas FORNECEDOR/AMBOS; chip "Tipo" na toolbar com filtro Todos/Fornecedor/Ambos
-- [ ] **`ClientsViewModel`** — `clients/ClientsViewModel.kt`; herda `BaseCrudViewModel<Supplier, SupplierUiState>`; delega ao mesmo `SupplierService` com `loadItems()` chamando `repository.findClients()`
-- [ ] **Sidebar item "Clientes"** — grupo CADASTROS, após Fornecedores; `Screen.Clients` em `Screen.kt`; roteamento em `MainLayout.kt`
+- [x] **`ClientsScreen`** — `clients/ClientsScreen.kt`; reutiliza exatamente os composables de `SupplierManagementScreen` (sem duplicar lógica); diferença: título "Clientes", `viewModel.load()` chama `findClients()`; painel de detalhes com campo `entityType` pré-selecionado em CLIENTE
+- [x] **Tela de Fornecedores ajustada** — `SupplierManagementScreen`: `SupplierViewModel.load()` passa a chamar `findSuppliers()` em vez de `findAll()` para filtrar apenas FORNECEDOR/AMBOS; chip "Tipo" na toolbar com filtro Todos/Fornecedor/Ambos
+- [x] **`ClientsViewModel`** — `clients/ClientsViewModel.kt`; herda `BaseCrudViewModel<Supplier, SupplierUiState>`; delega ao mesmo `SupplierService` com `loadItems()` chamando `repository.findClients()`
+- [x] **Sidebar item "Clientes"** — grupo CADASTROS, após Fornecedores; `Screen.Clients` em `Screen.kt`; roteamento em `MainLayout.kt`
 
 #### 7-C.3 — Campo Cliente nas Transações
 
-- [ ] **`TransactionDetailsPanel` — label dinâmico** — campo contraparte (`supplierId`) exibe "Fornecedor" quando `type == EXPENSE` e "Cliente" quando `type == INCOME`; lista de opções carregada com `findSuppliers()` para EXPENSE e `findClients()` para INCOME; ao trocar o `type` no formulário, a lista recarrega e a seleção é limpa
-- [ ] **Livro Diário e relatórios** — coluna "Credor/Cliente" nos relatórios já existentes: para INCOME, exibe o nome do cliente vinculado (mesmo campo `supplierId`, só muda o label no cabeçalho)
+- [x] **`TransactionDetailsPanel` — label dinâmico** — campo contraparte (`supplierId`) exibe "Fornecedor" quando `type == EXPENSE` e "Cliente" quando `type == INCOME`; lista de opções carregada com `findSuppliers()` para EXPENSE e `findClients()` para INCOME; ao trocar o `type` no formulário, a lista recarrega e a seleção é limpa
+- [x] **Livro Diário e relatórios** — coluna "Credor/Cliente" nos relatórios já existentes: para INCOME, exibe o nome do cliente vinculado (mesmo campo `supplierId`, só muda o label no cabeçalho)
 
 #### 7-C.4 — Tela de Contas a Receber
 
-- [ ] **`ReceivablesScreen`** — `receivables/ReceivablesScreen.kt`; filtra transações `type=INCOME` com status `PENDING/OVERDUE/PARTIAL`; agrupadas por cliente (nome ou "Sem cliente"); colunas: Cliente / Descrição / Vencimento / Valor / Status / Dias em atraso; linha em vermelho quando `OVERDUE`
-- [ ] **`ReceivablesViewModel`** — carrega via `TransactionRepository.findReceivables()` (nova query: `type=INCOME AND status IN (PENDING,OVERDUE,PARTIAL)`); agrupa por `supplierId`; calcula `daysOverdue = max(0, today - dueDate)`
-- [ ] **Tiles de aging no topo da `ReceivablesScreen`** — 4 tiles: "A vencer" / "1–30 dias" / "31–60 dias" / "61+ dias"; valores calculados no `ReceivablesViewModel`; cores: cinza / amarelo / laranja / vermelho
-- [ ] **Card de Recebíveis no Dashboard** — tile "Recebíveis Vencidos" com total em atraso e contagem (análogo ao tile "Vencidos" já existente para despesas); `DashboardViewModel` injeta query de recebíveis via `TransactionRepository`
-- [ ] **Sidebar item "Recebíveis"** — grupo FINANCEIRO, após Movimentações; `Screen.Receivables` em `Screen.kt`; roteamento em `MainLayout.kt`
+- [x] **`ReceivablesScreen`** — `receivables/ReceivablesScreen.kt`; filtra transações `type=INCOME` com status `PENDING/OVERDUE/PARTIAL`; agrupadas por cliente (nome ou "Sem cliente"); colunas: Cliente / Descrição / Vencimento / Valor / Status / Dias em atraso; linha em vermelho quando `OVERDUE`
+- [x] **`ReceivablesViewModel`** — carrega via `TransactionRepository.findReceivables()` (nova query: `type=INCOME AND status IN (PENDING,OVERDUE,PARTIAL)`); agrupa por `supplierId`; calcula `daysOverdue = max(0, today - dueDate)`
+- [x] **Tiles de aging no topo da `ReceivablesScreen`** — 4 tiles: "A vencer" / "1–30 dias" / "31–60 dias" / "61+ dias"; valores calculados no `ReceivablesViewModel`; cores: cinza / amarelo / laranja / vermelho
+- [x] **Card de Recebíveis no Dashboard** — tile "Recebíveis Vencidos" com total em atraso e contagem (análogo ao tile "Vencidos" já existente para despesas); `DashboardViewModel` injeta query de recebíveis via `TransactionRepository`
+- [x] **Sidebar item "Recebíveis"** — grupo FINANCEIRO, após Movimentações; `Screen.Receivables` em `Screen.kt`; roteamento em `MainLayout.kt`
+
+---
+
+### Fase 8 — Importação de Folha de Pagamento (XLSX)
+
+> **Objetivo:** o operador recebe mensalmente o espelho da folha em `.xlsx` (gerado pelo SCI Ambiente Contábil ÚNICO) e faz upload no SisgFin. O sistema lê os 80+ funcionários, extrai adiantamento e líquido de cada um e cria os lançamentos de contas a pagar em status `PENDING` para revisão — sem digitação manual.
+>
+> **Arquivo de referência:** `docs/Espelho e resumo da folha.xlsx` (junho/2026 — 80 funcionários).
+>
+> **Dependência nova:** nenhuma. Apache POI `poi-ooxml:5.3.0` já está no `build.gradle.kts`.
+>
+> **Fora de escopo desta fase:** suporte a PDF (adicionado em fase futura após o XLSX estar estável).
+
+---
+
+#### 8-A — Pré-requisito: Vincular Employee → Supplier
+
+> Atualmente `Employee` e `Supplier` são entidades separadas. O lançamento de contas a pagar exige um `supplierId`. Esta etapa cria a FK opcional que conecta um funcionário ao seu cadastro como fornecedor (para pagamento de salário).
+
+- [x] **`V24__employee_supplier_fk.sql`** — adiciona coluna `supplier_id INTEGER NULL REFERENCES suppliers(id)` em `employees`; sem NOT NULL para não quebrar cadastros existentes
+- [x] **`Employee` atualizado** — campo `supplierId: Int?` adicionado ao `data class`; `EmployeeRepository`: incluir em `insert`, `update`, `rowToEmployee`
+- [x] **`EmployeesScreen` — campo "Fornecedor vinculado"** — `WsSelectField` opcional no formulário de edição; lista fornecedores ativos; badge "Vinculado ✓" na tabela quando `supplierId != null`; ao salvar funcionário sem vínculo, aviso não bloqueante ("Configure o fornecedor para usar importação de folha")
+- [x] **`EmployeeRepository.findByCpf(cpf: String): Employee?`** — busca por CPF para o lookup no import; CPF armazenado sem formatação para comparação normalizada (`replace("[^0-9]", "")`)
+
+---
+
+#### 8-B — Modelo e Parser XLSX
+
+- [x] **`PayrollImportModels.kt`** — em `payroll/`; entidades:
+  - `data class PayrollRawEntry(matricula, nome, cpf, funcao, adiantamento, liquido, salaryBase, liquidoCount)` — saída bruta do parser
+  - `data class PayrollEntry(raw, employeeId, supplierId, supplierName, adiantamentoDueDate, liquidoDueDate, employeeFound, warningMessage)` — enriquecida pelo Service
+  - `data class PayrollImportResult(entries, notFoundCount, warnings, referenceMonth: YearMonth)`
+  - `data class PayrollImportBatch(id, referenceMonth, importedAt, importedBy, totalEmployees, transactionsCreated)`
+- [x] **`PayrollXlsxParser.kt`** — em `payroll/`; usa `WorkbookFactory.create(file)` do Apache POI; lógica:
+  1. Detecta início de bloco de funcionário: célula A tem inteiro (matrícula) + célula E tem texto ≠ "CPF"
+  2. Próxima linha: extrai CPF via regex `CPF:\s*([\d.\-]+)` da célula E; extrai Função via `Função:\s*(.+)`
+  3. Varre linhas seguintes até próximo bloco com boundary estrita (sem vazamento entre blocos): célula AH == "903" → adiantamento de BH; célula AT contém "Líquido" → líquido de BH (segundo = férias acumuladas)
+  4. Salário base extraído do cabeçalho (col AB) para detecção de anomalia
+  5. Retorna `List<PayrollRawEntry>` via `ParseResult(entries, warnings)`
+- [x] **Tratamento de edge cases no parser:**
+  - Adiantamento zero (férias sem antecipação): `adiantamento = Money.ZERO` — Service cria apenas 1 lançamento
+  - Dois blocos Líquido (férias): soma os dois como `liquido`, warning "Funcionário X: férias detectadas — valores unificados"
+  - Valor anômalo (> salário base × 3): warning + adiantamento zerado, sem exceção
+  - CPF ausente ou inválido: warning "Funcionário X: CPF não encontrado ou inválido na linha Y"
+- [x] **Testes unitários `PayrollXlsxParserTest`** — 6 testes: 3 com arquivo real `docs/Espelho e resumo da folha.xlsx` (80 funcionários, Adriana, Fernanda Grandchamp) + 3 sintéticos (anomalia, dois-Líquidos, sem CPF); BUILD SUCCESSFUL
+
+---
+
+#### 8-C — Serviço de Importação
+
+- [x] **`PayrollImportService.kt`** — em `payroll/`; `import()` parse + enriquecimento (CPF lookup, supplier name, datas calculadas, `warningMessage` por entrada); `confirm()` cancela PayrollEngine e cria lançamentos reais; datas configuráveis via `employee.paymentDays` (fallback: dia 20 e dia 5 do mês seguinte); registrado em `ServiceModule` com `single {}`
+- [x] **`TransactionService.createFromPayrollImport()`** — análogo a `createFromOfx()`; status PENDING direto; sem parcelamento; timeline `PAYROLL_IMPORT`; audit `TRANSACTION_CREATED`
+- [x] **`TimelineEventType.PAYROLL_IMPORT`** — adicionado ao enum
+- [x] **Coordenação com `PayrollEngine`** — `confirm()` chama `TransactionService.cancelPendingPayrollForMonth()` antes de criar os lançamentos; cancela PENDING/DRAFT/SCHEDULED do funcionário no `referenceMonth` e mês seguinte com timeline `CANCELED`
+- [x] **`TransactionRepository.findPendingPayrollForMonth()`** — query por `employeeId + dueDate` no intervalo; usada por `TransactionService.cancelPendingPayrollForMonth()`
+
+---
+
+#### 8-D — UI: Wizard de Importação
+
+- [x] **`PayrollImportScreen.kt`** — em `payroll/`; wizard de 4 etapas:
+
+  **(1) SelectFile** — botão "Selecionar arquivo XLSX" (`java.awt.FileDialog`, filtro `*.xlsx`); campos: Mês/Ano de referência (`WsDateField` com máscara MM/yyyy), Conta debitada (`WsSelectField`), Categoria padrão (`WsSelectField` — ex: "Vencimentos e Salários"), Centro de Custo (opcional); histórico das últimas importações em tabela compacta (Mês / Data importação / Funcionários / Transações criadas); botão "Avançar" habilitado somente com arquivo + conta + categoria selecionados
+
+  **(2) Preview** — chips de resumo: "80 funcionários lidos / 78 localizados / 2 não encontrados / R$ 449.276,51 total"; tabela completa com colunas: Funcionário / CPF / 1ª Parcela (Adiantamento) / Venc. Adiant. / 2ª Parcela (Líquido) / Venc. Líquido / Status; linhas amarelas para `warningMessage != null`; linhas vermelhas para `employeeFound == false`; ícone de aviso com tooltip do warning; coluna "Status" mostra badge "OK" / "⚠ Aviso" / "✗ Não encontrado"; checkbox por linha para excluir da importação; rodapé: total selecionados, total em R$, botões "Voltar" e "Confirmar importação"
+
+  **(3) Processando** — overlay com spinner e mensagem "Criando lançamentos... (N/80)"
+
+  **(4) Resultado** — cards: "Transações criadas", "Funcionários não localizados", "Avisos"; lista de não-localizados com nome e CPF (para o usuário criar manualmente); botões "Ver no Contas a Pagar" (navega para `Screen.Transactions` com filtro por data) e "Nova importação"
+
+- [x] **`PayrollImportViewModel.kt`** — em `payroll/`; `CoroutineScope(SupervisorJob() + Dispatchers.Main)`; estados: `SelectFile`, `Parsing`, `Preview(result)`, `Confirming`, `Done(summary)`; `parseFile(file)` chama `PayrollXlsxParser` em `Dispatchers.IO`; `toggleEntry(index)` atualiza lista de selecionados; `confirm()` chama `PayrollImportService.confirm()` em `Dispatchers.IO`; expõe `uiState: StateFlow<PayrollImportUiState>`
+
+- [x] **`PayrollImportUiState.kt`** — em `payroll/`; `data class` com: `step: PayrollImportStep`, `result: PayrollImportResult?`, `selectedIndices: Set<Int>`, `isLoading: Boolean`, `error: String?`, `totalSelected: Int`, `totalAmountSelected: Money` (derivados)
+
+- [x] **Navegação e registro** — `Screen.PayrollImport` adicionado em `Screen.kt`; roteamento em `MainLayout.kt` (`Screen.PayrollImport -> PayrollImportScreen()`); sidebar item "Importar Folha" no grupo GESTÃO, após "Funcionários"; menu Arquivo → "Importar Folha de Pagamento" adicionado em `Main.kt`; `PayrollImportViewModel` registrado como `factory` no `ViewModelModule`; `PayrollImportService` registrado como `single` no `ServiceModule`
+
+---
+
+#### 8-E — Suporte a PDF (fase futura — fora de escopo agora)
+
+> Adicionado após o fluxo XLSX estar em produção e validado. Usar Apache PDFBox (`pdfbox:3.0.3`, já no projeto) com `PDFTextStripper` + regex para extrair os mesmos campos. O `PayrollImportScreen` ganha filtro `*.xlsx;*.pdf` e detecta o tipo pelo header do arquivo.
+
+- [ ] **`PayrollPdfParser.kt`** — parser baseado em `PDDocument.load(file)` + `PDFTextStripper`; regex para detectar início de bloco (`^\d{1,3}\s+[A-Z]`), extração de CPF, adiantamento (linha com "903") e líquido (linha com "Líquido ->"); mais frágil que XLSX — testes devem cobrir mudanças de layout
+
+---
+
+### Fase 9 — Simplificação do Cadastro de Pessoal (Remover Duplo Registro PJ)
+
+> **Problema:** funcionários PJ precisam ser cadastrados em dois lugares (Funcionários + Fornecedores) e vinculados manualmente para que a importação da folha funcione. CLT também exige esse vínculo, o que é conceitualmente errado. Toda a complexidade vaza para a UI como campo "FORNECEDOR VINCULADO" e avisos de configuração.
+>
+> **Objetivo:** todo trabalhador — CLT, PJ, Estágio, Outros — é cadastrado **uma única vez em Funcionários**. O sistema não exige mais `supplierId` para processar ou gerar lançamentos de folha. Fornecedores passa a ser exclusivo de contratados externos que emitem NF-e fora da folha.
+
+#### 9-A — Banco de dados
+
+- [x] **`V26__drop_employee_supplier_fk.sql`** — `ALTER TABLE employees DROP COLUMN supplier_id` — remove a FK que não é mais necessária; migração segura pois a coluna é nullable e não há dados em produção
+
+#### 9-B — Modelo e repositório
+
+- [x] **`Employee.kt`** — remover campo `supplierId: Int?`
+- [x] **`Tables.kt`** — remover `Employees.supplierId`
+- [x] **`EmployeeRepository.kt`** — remover `supplierId` de `insert()`, `update()` e `toEmployee()`
+
+#### 9-C — Serviço de importação da folha
+
+- [x] **`PayrollImportService.kt`** — condição `employeeFound = employee != null`; sem lookup de supplier; warning reduzido a "CPF não localizado"; `supplierId` removido das transações criadas
+- [x] **`PayrollEntry`** em `PayrollImportModels.kt` — campos `supplierId: Int?` e `supplierName: String` removidos
+- [x] **`ServiceModule.kt`** — `SupplierRepository` removido do construtor de `PayrollImportService`
+
+#### 9-D — UI: tela de Funcionários
+
+- [x] **`EmployeesScreen.kt`** — `WsSelectField "FORNECEDOR VINCULADO"` e aviso removidos do `EmployeeEditorPanel`; estado local `supplierId` removido; removido do `employee.copy()`
+- [x] **`EmployeesScreen.kt`** — coluna "FOLHA" e badge "✓ Vinc." removidos da tabela e do `EmployeeRow`
+- [x] **`EmployeeViewModel.kt`** — `SupplierRepository`, `_suppliers` StateFlow e `loadSuppliers()` removidos
+- [x] **`ViewModelModule.kt`** — factory de `EmployeeViewModel` atualizado de 3 para 2 parâmetros
+
+#### 9-E — Verificação final
+
+- [x] Confirmar que `./gradlew test` passa sem regressões
+- [x] Confirmar que importação da folha processa CLT e PJ sem exigir vínculo com fornecedor — `employeeFound = employee != null`
+- [x] Confirmar que remessa bancária (`PayrollBankExporter`) continua funcionando — cadeia usa `employee.document / formattedAgency / formattedAccount` sem nenhuma referência a `supplierId`
 
 ---
 

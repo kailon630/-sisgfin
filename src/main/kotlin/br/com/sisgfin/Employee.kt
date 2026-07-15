@@ -15,9 +15,26 @@ data class Employee(
     val paymentDay: Int,
     val paymentDays: String? = null,
     val employmentType: String? = null,
+    val bankCode: String? = null,
+    val agencyNumber: String? = null,
+    val agencyDv: String? = null,
+    val accountNumber: String? = null,
+    val accountDv: String? = null,
+    val accountType: String? = "CS",
     val active: Boolean = true,
     val createdAt: LocalDateTime = LocalDateTime.now()
 ) : Identifiable {
+
+    val formattedAgency: String?
+        get() = if (!agencyNumber.isNullOrBlank() && !agencyDv.isNullOrBlank())
+            "$agencyNumber-$agencyDv" else agencyNumber
+
+    val formattedAccount: String?
+        get() = if (!accountNumber.isNullOrBlank() && !accountDv.isNullOrBlank())
+            "$accountNumber-$accountDv" else accountNumber
+
+    val hasBankingData: Boolean
+        get() = !bankCode.isNullOrBlank() && !agencyNumber.isNullOrBlank() && !accountNumber.isNullOrBlank()
 
     // Retorna a lista de dias efetivos para geração automática.
     // paymentDays ("5,20") tem precedência; paymentDay é fallback quando paymentDays está nulo.

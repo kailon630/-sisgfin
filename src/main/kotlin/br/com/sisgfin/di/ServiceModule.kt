@@ -8,6 +8,7 @@ import br.com.sisgfin.budget.BudgetItemService
 import br.com.sisgfin.ofx.OfxImportService
 import br.com.sisgfin.ofx.OfxParser
 import br.com.sisgfin.contracts.ContractService
+import br.com.sisgfin.payroll.PayrollImportService
 import br.com.sisgfin.recurrence.RecurrenceEngine
 import br.com.sisgfin.recurrence.RecurrenceTemplateService
 import org.koin.dsl.module
@@ -59,6 +60,12 @@ val serviceModule = module {
             get(), // ContractRepository
             get(), // TransactionRepository
             get()  // SessionManager
+        )
+    }
+    single {
+        PayrollImportService(
+            get(), // EmployeeRepository
+            get()  // TransactionService
         )
     }
     single {

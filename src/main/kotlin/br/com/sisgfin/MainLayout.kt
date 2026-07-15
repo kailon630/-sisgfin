@@ -35,6 +35,8 @@ import br.com.sisgfin.financial.transactions.TransactionsScreen
 import br.com.sisgfin.financial.transactions.TransactionsViewModel
 import br.com.sisgfin.ofx.OfxImportScreen
 import br.com.sisgfin.ofx.OfxImportViewModel
+import br.com.sisgfin.payroll.PayrollImportScreen
+import br.com.sisgfin.payroll.PayrollImportViewModel
 import br.com.sisgfin.clients.ClientsScreen
 import br.com.sisgfin.clients.ClientsViewModel
 import br.com.sisgfin.contracts.ContractViewModel
@@ -129,8 +131,9 @@ fun MainLayout(
                 is Screen.OfxImport     -> "Importar OFX"
                 is Screen.Recurring     -> "Recorrências"
                 is Screen.Contracts     -> "Contratos"
-                is Screen.Clients       -> "Clientes"
+                is Screen.Clients        -> "Clientes"
                 is Screen.Receivables   -> "Contas a Receber"
+                is Screen.PayrollImport -> "Importar Folha de Pagamento"
                 else                     -> ""
             }
             TopToolbar(
@@ -206,7 +209,11 @@ fun MainLayout(
                             is Screen.CashFlow -> CashFlowScreen(cashFlowViewModel)
                             is Screen.OfxImport -> OfxImportScreen(
                                 viewModel = koinInject<OfxImportViewModel>(),
-                                onNavigateToStatement = { navigationState.navigateTo(Screen.Statement) }
+                                onNavigateToStatement = { navigationState.navigateTo(Screen.Statement) },
+                                onNavigateToManualTx = { tx ->
+                                    transactionsViewModel.deepLinkTo(tx)
+                                    navigationState.navigateTo(Screen.Transactions)
+                                }
                             )
                             is Screen.Recurring -> RecurringScreen(
                                 viewModel = recurringViewModel,
@@ -224,6 +231,11 @@ fun MainLayout(
                                 onCloseRightPanel = { rightPanelContent = null }
                             )
                             is Screen.Receivables -> ReceivablesScreen(receivablesViewModel)
+                            is Screen.PayrollImport -> PayrollImportScreen(
+                                viewModel = koinInject<PayrollImportViewModel>(),
+                                onNavigateToTransactions = { navigationState.navigateTo(Screen.Transactions) },
+                                onNavigateToEmployees    = { navigationState.navigateTo(Screen.Employees) }
+                            )
                             else -> DashboardScreen(dashboardViewModel)
                         }
                     }

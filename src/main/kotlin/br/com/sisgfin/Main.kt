@@ -118,7 +118,8 @@ fun main() = application {
                 MenuBar {
                     Menu("Arquivo") {
                         Item("Nova Transação",       onClick = { nav.navigateTo(Screen.Transactions) })
-                        Item("Importar Extrato OFX", onClick = { nav.navigateTo(Screen.OfxImport) })
+                        Item("Importar Extrato OFX",           onClick = { nav.navigateTo(Screen.OfxImport) })
+                        Item("Importar Folha de Pagamento",   onClick = { nav.navigateTo(Screen.PayrollImport) })
                         Separator()
                         Item("Sair", onClick = { exitApplication() })
                     }

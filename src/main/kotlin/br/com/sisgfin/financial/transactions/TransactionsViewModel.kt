@@ -209,6 +209,12 @@ class TransactionsViewModel(
         item?.let { loadTimeline(it.id) } ?: run { _timeline.value = emptyList() }
     }
 
+    private val _pendingDeepLink = MutableStateFlow<Transaction?>(null)
+    val pendingDeepLink: StateFlow<Transaction?> = _pendingDeepLink.asStateFlow()
+
+    fun deepLinkTo(tx: Transaction) { _pendingDeepLink.value = tx }
+    fun clearDeepLink() { _pendingDeepLink.value = null }
+
     fun loadTimeline(transactionId: Int) {
         viewModelScope.launch {
             _timeline.value = withContext(Dispatchers.IO) { service.getTimeline(transactionId) }
