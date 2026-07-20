@@ -179,6 +179,8 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             it[FinancialTransactionsTable.reconciledWithFitId]  = entity.reconciledWithFitId
             it[FinancialTransactionsTable.recurrenceTemplateId] = entity.recurrenceTemplateId
             it[FinancialTransactionsTable.contractId]           = entity.contractId
+            it[FinancialTransactionsTable.interestAmount]       = entity.interestAmount?.value
+            it[FinancialTransactionsTable.fineAmount]           = entity.fineAmount?.value
         } get FinancialTransactionsTable.id
     }
 
@@ -209,6 +211,8 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
                 it[FinancialTransactionsTable.reconciledWithFitId]  = entity.reconciledWithFitId
                 it[FinancialTransactionsTable.recurrenceTemplateId] = entity.recurrenceTemplateId
                 it[FinancialTransactionsTable.contractId]           = entity.contractId
+                it[FinancialTransactionsTable.interestAmount]       = entity.interestAmount?.value
+                it[FinancialTransactionsTable.fineAmount]           = entity.fineAmount?.value
                 // employeeId não é atualizado via update geral — é definido apenas na criação
             }
         }
@@ -617,7 +621,9 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
         ofxFitId              = row[FinancialTransactionsTable.ofxFitId],
         reconciledWithFitId   = row[FinancialTransactionsTable.reconciledWithFitId],
         recurrenceTemplateId  = row[FinancialTransactionsTable.recurrenceTemplateId],
-        contractId            = row[FinancialTransactionsTable.contractId]
+        contractId            = row[FinancialTransactionsTable.contractId],
+        interestAmount        = row[FinancialTransactionsTable.interestAmount]?.toMoney(),
+        fineAmount            = row[FinancialTransactionsTable.fineAmount]?.toMoney()
     )
 
     // Fase 7-B: soma paidAmount das transações PAID vinculadas ao contrato

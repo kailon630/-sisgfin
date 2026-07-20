@@ -38,5 +38,7 @@ data class Transaction(
     val ofxFitId: String? = null,
     val reconciledWithFitId: String? = null,
     val recurrenceTemplateId: Int? = null,
-    val contractId: Int? = null
+    val contractId: Int? = null,
+    val interestAmount: Money? = null,
+    val fineAmount: Money? = null
 ) : Identifiable, Activatable

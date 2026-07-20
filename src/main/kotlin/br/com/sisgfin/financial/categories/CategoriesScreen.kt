@@ -205,6 +205,18 @@ fun CategoryDetailsPanel(viewModel: ExpenseCategoryViewModel, onClose: () -> Uni
                 )
             }
         }
+        if (item.id != 0) {
+            TextButton(
+                onClick = { viewModel.toggleActive(item.id) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    if (item.isActive) "Desativar Categoria" else "Ativar Categoria",
+                    color = if (item.isActive) WsDanger else WsSuccess,
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+        }
     }
 }
 

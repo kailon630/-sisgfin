@@ -159,6 +159,8 @@ fun TransactionDetailsPanel(
         DetailSection("Resumo") {
             SummaryRow("Valor total", MoneyFormatter.format(item.amount))
             item.paidAmount?.let { SummaryRow("Valor pago", MoneyFormatter.format(it)) }
+            item.interestAmount?.let { SummaryRow("Juros", MoneyFormatter.format(it)) }
+            item.fineAmount?.let { SummaryRow("Multa", MoneyFormatter.format(it)) }
             SummaryRow("Emissão", item.issueDate.format(dateFormatter))
             SummaryRow("Vencimento", item.dueDate.format(dateFormatter))
             item.paymentDate?.let { SummaryRow("Pagamento", it.format(dateFormatter)) }
@@ -421,8 +423,8 @@ fun TransactionDetailsPanel(
             issueDate = item.issueDate,
             totalAmount = item.amount,
             onDismiss = { showPaymentDialog = false },
-            onConfirm = { date, paid ->
-                viewModel.recordPayment(item.id, date, paid)
+            onConfirm = { date, paid, interest, fine ->
+                viewModel.recordPayment(item.id, date, paid, interest, fine)
                 showPaymentDialog = false
             }
         )
@@ -626,9 +628,11 @@ fun PaymentRecordDialog(
     issueDate: LocalDateTime,
     totalAmount: Money,
     onDismiss: () -> Unit,
-    onConfirm: (LocalDateTime, Money) -> Unit
+    onConfirm: (LocalDateTime, Money, Money?, Money?) -> Unit
 ) {
     var paidStr by remember { mutableStateOf(totalAmount.toString()) }
+    var interestStr by remember { mutableStateOf("") }
+    var fineStr by remember { mutableStateOf("") }
     var payDate by remember { mutableStateOf(LocalDate.now().format(dateFormatter)) }
 
     val parsedDate = parseDate(payDate)
@@ -643,8 +647,10 @@ fun PaymentRecordDialog(
         title = { Text("Registrar pagamento") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Total: ${MoneyFormatter.format(totalAmount)}", color = WsTextSecondary)
+                Text("Valor original: ${MoneyFormatter.format(totalAmount)}", color = WsTextSecondary)
                 WsTextField("VALOR PAGO (R$)", paidStr) { paidStr = it }
+                WsTextField("JUROS (R$) — opcional", interestStr) { interestStr = it }
+                WsTextField("MULTA (R$) — opcional", fineStr) { fineStr = it }
                 WsTextField("DATA DE PAGAMENTO (DD/MM/AAAA)", payDate) { payDate = it }
                 if (dateError != null) {
                     Text(
@@ -658,7 +664,9 @@ fun PaymentRecordDialog(
         confirmButton = {
             WsButton("Confirmar", onClick = {
                 if (dateError == null) {
-                    onConfirm(parsedDate.atStartOfDay(), paidStr.toMoney())
+                    val interest = interestStr.trim().takeIf { it.isNotEmpty() }?.toMoney()
+                    val fine = fineStr.trim().takeIf { it.isNotEmpty() }?.toMoney()
+                    onConfirm(parsedDate.atStartOfDay(), paidStr.toMoney(), interest, fine)
                 }
             })
         },

@@ -204,6 +204,18 @@ fun FinancialAccountDetailsPanel(viewModel: FinancialAccountViewModel, onClose: 
         DetailSection("Configuração Inicial") {
             WsTextField("SALDO DE ABERTURA (R$)", initialBalance) { initialBalance = it }
         }
+        if (item.id != 0) {
+            TextButton(
+                onClick = { viewModel.toggleActive(item.id) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    if (item.isActive) "Desativar Conta" else "Ativar Conta",
+                    color = if (item.isActive) WsDanger else WsSuccess,
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+        }
     }
 }
 

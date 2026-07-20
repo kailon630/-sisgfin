@@ -181,6 +181,18 @@ fun SupplierDetailsPanel(viewModel: SupplierViewModel, onClose: () -> Unit) {
         DetailSection("Financeiro") {
             WsTextField("CHAVE PIX", pixKey) { pixKey = it }
         }
+        if (item.id != 0) {
+            TextButton(
+                onClick = { viewModel.toggleActive(item.id) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    if (item.isActive) "Desativar Fornecedor" else "Ativar Fornecedor",
+                    color = if (item.isActive) WsDanger else WsSuccess,
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+        }
     }
 }
 

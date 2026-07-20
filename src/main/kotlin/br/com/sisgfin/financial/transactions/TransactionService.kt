@@ -318,7 +318,9 @@ class TransactionService(
     fun recordPayment(
         id: Int,
         paymentDate: LocalDateTime,
-        paidAmount: Money
+        paidAmount: Money,
+        interestAmount: Money? = null,
+        fineAmount: Money? = null
     ) {
         requirePermission(Permission.ConfirmPayment)
         val existing = repository.findById(id)
@@ -338,6 +340,8 @@ class TransactionService(
             status = newStatus,
             paymentDate = paymentDate,
             paidAmount = paidAmount,
+            interestAmount = interestAmount,
+            fineAmount = fineAmount,
             updatedAt = LocalDateTime.now()
         )
         TransactionValidator.validateForSave(updated, existing)

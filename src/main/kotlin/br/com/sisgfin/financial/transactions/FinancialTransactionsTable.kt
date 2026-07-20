@@ -33,6 +33,8 @@ object FinancialTransactionsTable : Table("financial_transactions") {
     val reconciledWithFitId  = varchar("reconciled_with_fitid", 64).nullable()
     val recurrenceTemplateId = integer("recurrence_template_id").nullable()
     val contractId           = integer("contract_id").nullable()
+    val interestAmount       = decimal("interest_amount", 19, 2).nullable()
+    val fineAmount           = decimal("fine_amount", 19, 2).nullable()
 
     override val primaryKey = PrimaryKey(id)
 }

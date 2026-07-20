@@ -86,7 +86,9 @@ import kotlinx.serialization.Serializable
 
 @Serializable data class PaymentRequest(
     val paymentDate: String,
-    val paidAmount: String
+    val paidAmount: String,
+    val interestAmount: String? = null,
+    val fineAmount: String? = null
 )
 
 @Serializable data class ReversalRequest(val justification: String)

@@ -239,8 +239,14 @@ class TransactionsViewModel(
         load()
     }
 
-    fun recordPayment(id: Int, paymentDate: LocalDateTime, paidAmount: Money) {
-        runOperation { service.recordPayment(id, paymentDate, paidAmount) }
+    fun recordPayment(
+        id: Int,
+        paymentDate: LocalDateTime,
+        paidAmount: Money,
+        interestAmount: Money? = null,
+        fineAmount: Money? = null
+    ) {
+        runOperation { service.recordPayment(id, paymentDate, paidAmount, interestAmount, fineAmount) }
     }
 
     fun markAsPaidFull(id: Int, paymentDate: LocalDateTime = LocalDateTime.now()) {

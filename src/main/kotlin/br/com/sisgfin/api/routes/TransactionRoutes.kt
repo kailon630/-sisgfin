@@ -148,7 +148,9 @@ fun Route.transactionRoutes(
                     service.recordPayment(
                         id,
                         LocalDateTime.parse(body.paymentDate, dtFmt),
-                        Money(BigDecimal(body.paidAmount))
+                        Money(BigDecimal(body.paidAmount)),
+                        body.interestAmount?.let { Money(BigDecimal(it)) },
+                        body.fineAmount?.let { Money(BigDecimal(it)) }
                     )
                 }
             }.getOrElse {

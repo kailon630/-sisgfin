@@ -165,6 +165,18 @@ fun CostCenterDetailsPanel(viewModel: CostCenterViewModel, onClose: () -> Unit) 
                 color = WsTextDisabled
             )
         }
+        if (item.id != 0) {
+            TextButton(
+                onClick = { viewModel.toggleActive(item.id) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    if (item.isActive) "Desativar Centro de Custo" else "Ativar Centro de Custo",
+                    color = if (item.isActive) WsDanger else WsSuccess,
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+        }
     }
 }
 
