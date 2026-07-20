@@ -181,6 +181,31 @@ class OfxImportViewModel(
         _step.value = Step.Done(reconcile.result)
     }
 
+    fun quickPayManual(txId: Int, paymentDate: java.time.LocalDateTime) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val tx = transactionService.findById(txId) ?: return@withContext
+                    transactionService.recordPayment(txId, paymentDate, tx.amount)
+                }
+            }
+            _isLoading.value = false
+        }
+    }
+
+    fun quickCancelManual(txId: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    transactionService.cancel(txId)
+                }
+            }
+            _isLoading.value = false
+        }
+    }
+
     fun reset() {
         _step.value       = Step.SelectFile
         _errorMessage.value = null

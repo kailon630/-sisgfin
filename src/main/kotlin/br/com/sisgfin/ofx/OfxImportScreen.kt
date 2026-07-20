@@ -103,7 +103,9 @@ fun OfxImportScreen(
                     onNavigateToManualTx  = onNavigateToManualTx,
                     onQuickEdit           = { txId, desc, supId ->
                         viewModel.quickEditOfxEntry(txId, desc, supId)
-                    }
+                    },
+                    onQuickPay            = { txId, date -> viewModel.quickPayManual(txId, date) },
+                    onQuickCancel         = { txId -> viewModel.quickCancelManual(txId) }
                 )
         }
     }
@@ -600,7 +602,9 @@ private fun DoneStep(
     onNewImport: () -> Unit,
     onNavigateToStatement: () -> Unit,
     onNavigateToManualTx: (Transaction) -> Unit,
-    onQuickEdit: (txId: Int, description: String, supplierId: Int?) -> Unit
+    onQuickEdit: (txId: Int, description: String, supplierId: Int?) -> Unit,
+    onQuickPay: (txId: Int, paymentDate: java.time.LocalDateTime) -> Unit,
+    onQuickCancel: (txId: Int) -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -690,7 +694,9 @@ private fun DoneStep(
         if (result.unmatchedManual.isNotEmpty()) {
             UnmatchedManualSection(
                 transactions = result.unmatchedManual,
-                onNavigate   = onNavigateToManualTx
+                onNavigate   = onNavigateToManualTx,
+                onQuickPay   = onQuickPay,
+                onQuickCancel = onQuickCancel
             )
         }
     }
@@ -860,11 +866,19 @@ private fun OFXQuickEditModal(
 
 // ── Seção: Previsões não liquidadas ──────────────────────────────────────────
 
+private enum class ManualTxResolution { PAID, CANCELLED }
+
 @Composable
 private fun UnmatchedManualSection(
     transactions: List<Transaction>,
-    onNavigate: (Transaction) -> Unit
+    onNavigate: (Transaction) -> Unit,
+    onQuickPay: (txId: Int, paymentDate: java.time.LocalDateTime) -> Unit,
+    onQuickCancel: (txId: Int) -> Unit
 ) {
+    var payingTx      by remember { mutableStateOf<Transaction?>(null) }
+    var confirmingTx  by remember { mutableStateOf<Transaction?>(null) }
+    var resolved      by remember { mutableStateOf(mapOf<Int, ManualTxResolution>()) }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -888,63 +902,191 @@ private fun UnmatchedManualSection(
             )
         }
         Text(
-            "Estes lançamentos estavam previstos no período mas não aparecem no extrato bancário.",
+            "Estes lançamentos estavam previstos no período mas não aparecem no extrato bancário. " +
+            "Quite, cancele ou abra o lançamento para tratar individualmente.",
             style = MaterialTheme.typography.bodyMedium, color = WsTextSecondary
         )
 
         transactions.forEach { tx ->
+            val resolution  = resolved[tx.id]
             val statusColor = when (tx.status) {
                 TransactionStatus.OVERDUE -> WsDanger
                 else                      -> WsWarning
             }
+            val (borderColor, bgColor) = when (resolution) {
+                ManualTxResolution.PAID      -> WsSuccess.copy(alpha = 0.5f) to WsSuccess.copy(alpha = 0.04f)
+                ManualTxResolution.CANCELLED -> WsBorder to WsBackground
+                null                         -> WsBorder to WsSurface
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
-                    .border(1.dp, WsBorder, RoundedCornerShape(8.dp))
-                    .background(WsSurface)
+                    .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+                    .background(bgColor)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            tx.description,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                            maxLines = 1, overflow = TextOverflow.Ellipsis
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                "Venc. ${tx.dueDate.toLocalDate().format(dateFmt)}",
-                                style = MaterialTheme.typography.bodyMedium, color = WsTextSecondary
+                                tx.description,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
-                            Surface(color = statusColor.copy(alpha = 0.12f), shape = RoundedCornerShape(3.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(
-                                    tx.status.displayName,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = statusColor
+                                    "Venc. ${tx.dueDate.toLocalDate().format(dateFmt)}",
+                                    style = MaterialTheme.typography.bodyMedium, color = WsTextSecondary
+                                )
+                                if (resolution == null) {
+                                    Surface(color = statusColor.copy(alpha = 0.12f), shape = RoundedCornerShape(3.dp)) {
+                                        Text(
+                                            tx.status.displayName,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = statusColor
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        Text(
+                            MoneyFormatter.format(tx.amount),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = if (tx.type == TransactionType.INCOME) WsSuccess else WsDanger
+                        )
+                        when (resolution) {
+                            ManualTxResolution.PAID -> Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Default.CheckCircle, null, tint = WsSuccess, modifier = Modifier.size(16.dp))
+                                Text("Quitado", style = MaterialTheme.typography.labelMedium, color = WsSuccess)
+                            }
+                            ManualTxResolution.CANCELLED -> Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Default.Cancel, null, tint = WsTextDisabled, modifier = Modifier.size(16.dp))
+                                Text("Cancelado", style = MaterialTheme.typography.labelMedium, color = WsTextDisabled)
+                            }
+                            null -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                WsButton(
+                                    text    = "Quitar",
+                                    icon    = Icons.Default.Check,
+                                    onClick = { payingTx = tx }
+                                )
+                                WsButton(
+                                    text    = "Cancelar",
+                                    icon    = Icons.Default.Close,
+                                    variant = WsButtonVariant.SECONDARY,
+                                    onClick = { confirmingTx = tx }
+                                )
+                                WsButton(
+                                    text    = "Ver",
+                                    icon    = Icons.Default.OpenInNew,
+                                    variant = WsButtonVariant.TERTIARY,
+                                    onClick = { onNavigate(tx) }
                                 )
                             }
                         }
                     }
-                    Text(
-                        MoneyFormatter.format(tx.amount),
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = if (tx.type == TransactionType.INCOME) WsSuccess else WsDanger
-                    )
-                    WsButton(
-                        text    = "Ver lançamento",
-                        icon    = Icons.Default.OpenInNew,
-                        variant = WsButtonVariant.SECONDARY,
-                        onClick = { onNavigate(tx) }
-                    )
                 }
             }
         }
     }
+
+    // Dialog de quitação rápida
+    payingTx?.let { tx ->
+        QuickPayDialog(
+            tx        = tx,
+            onConfirm = { date ->
+                onQuickPay(tx.id, date)
+                resolved = resolved + (tx.id to ManualTxResolution.PAID)
+                payingTx = null
+            },
+            onDismiss = { payingTx = null }
+        )
+    }
+
+    // Dialog de confirmação de cancelamento
+    confirmingTx?.let { tx ->
+        AlertDialog(
+            onDismissRequest = { confirmingTx = null },
+            shape            = RoundedCornerShape(8.dp),
+            containerColor   = WsSurface,
+            title            = { Text("Cancelar lançamento?") },
+            text             = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(tx.description, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    Text(
+                        "O lançamento será cancelado. Esta ação não pode ser desfeita.",
+                        style = MaterialTheme.typography.bodyMedium, color = WsTextSecondary
+                    )
+                }
+            },
+            confirmButton = {
+                WsButton("Confirmar cancelamento", onClick = {
+                    onQuickCancel(tx.id)
+                    resolved = resolved + (tx.id to ManualTxResolution.CANCELLED)
+                    confirmingTx = null
+                })
+            },
+            dismissButton = {
+                WsButton("Voltar", variant = WsButtonVariant.TERTIARY, onClick = { confirmingTx = null })
+            }
+        )
+    }
+}
+
+@Composable
+private fun QuickPayDialog(
+    tx: Transaction,
+    onConfirm: (java.time.LocalDateTime) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var payDate by remember { mutableStateOf(java.time.LocalDate.now().format(dateFmt)) }
+    val parsed  = runCatching {
+        java.time.LocalDate.parse(payDate, dateFmt)
+    }.getOrNull()
+    val dateError = when {
+        parsed == null -> "Data inválida"
+        parsed < tx.issueDate.toLocalDate() -> "Data não pode ser anterior à emissão"
+        else -> null
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape            = RoundedCornerShape(8.dp),
+        containerColor   = WsSurface,
+        title            = { Text("Registrar pagamento") },
+        text             = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(tx.description, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                Text(
+                    "Valor: ${MoneyFormatter.format(tx.amount)}",
+                    style = MaterialTheme.typography.bodyMedium, color = WsTextSecondary
+                )
+                WsTextField("DATA DE PAGAMENTO (DD/MM/AAAA)", payDate) { payDate = it }
+                if (dateError != null) {
+                    Text(dateError, style = MaterialTheme.typography.labelMedium, color = WsDanger)
+                }
+            }
+        },
+        confirmButton = {
+            WsButton("Confirmar", onClick = {
+                if (dateError == null && parsed != null) onConfirm(parsed.atStartOfDay())
+            })
+        },
+        dismissButton = {
+            WsButton("Cancelar", variant = WsButtonVariant.TERTIARY, onClick = onDismiss)
+        }
+    )
 }
 
 // ── Histórico de importações ──────────────────────────────────────────────────
