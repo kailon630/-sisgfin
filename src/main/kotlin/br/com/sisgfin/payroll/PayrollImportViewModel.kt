@@ -70,6 +70,12 @@ class PayrollImportViewModel(
         }
     }
 
+    fun loadFile(file: File) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(selectedFile = file, error = null) }
+        }
+    }
+
     // Chamado pelo botão "Avançar" — parseia e enriquece as entradas
     fun advance() {
         val state = _uiState.value

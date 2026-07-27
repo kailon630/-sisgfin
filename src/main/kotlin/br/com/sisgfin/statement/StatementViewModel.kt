@@ -7,6 +7,8 @@ import br.com.sisgfin.CostCenterRepository
 import br.com.sisgfin.financial.categories.ExpenseCategory
 import br.com.sisgfin.financial.categories.ExpenseCategoryRepository
 import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.projects.Project
+import br.com.sisgfin.financial.projects.ProjectRepository
 import br.com.sisgfin.financial.transactions.TransactionRepository
 import br.com.sisgfin.financial.transactions.TransactionType
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +27,7 @@ data class StatementUiState(
     val accounts: List<FinancialAccount> = emptyList(),
     val costCenters: List<CostCenter> = emptyList(),
     val categories: List<ExpenseCategory> = emptyList(),
+    val projects: List<Project> = emptyList(),
     val filter: StatementFilter = StatementFilter(),
     val openingBalance: Money = Money.ZERO,
     val entries: List<StatementEntry> = emptyList(),
@@ -37,7 +40,8 @@ class StatementViewModel(
     private val accountRepository: FinancialAccountRepository,
     private val transactionRepository: TransactionRepository,
     private val costCenterRepository: CostCenterRepository,
-    private val categoryRepository: ExpenseCategoryRepository
+    private val categoryRepository: ExpenseCategoryRepository,
+    private val projectRepository: ProjectRepository? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -57,6 +61,9 @@ class StatementViewModel(
                     categoryRepository.findAll()
                 )
             }
+            val projects = withContext(Dispatchers.IO) {
+                projectRepository?.findAllActive() ?: emptyList()
+            }
             val defaultFilter = StatementFilter(
                 accountId = accounts.firstOrNull()?.id,
                 from = LocalDate.now().withDayOfMonth(1),
@@ -66,6 +73,7 @@ class StatementViewModel(
                 accounts = accounts,
                 costCenters = costCenters,
                 categories = categories,
+                projects = projects,
                 filter = defaultFilter,
                 isLoading = false
             )
@@ -98,7 +106,8 @@ class StatementViewModel(
                         to = filter.to,
                         type = filter.type,
                         costCenterId = filter.costCenterId,
-                        categoryId = filter.categoryId
+                        categoryId = filter.categoryId,
+                        projectId = filter.projectId
                     )
 
                     var running = opening

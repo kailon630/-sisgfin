@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
@@ -259,7 +260,15 @@ fun WsSelectField(
     enabled: Boolean = true
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var query    by remember { mutableStateOf("") }
     val selectedLabel = options.find { it.first == selectedId }?.second ?: placeholder
+
+    LaunchedEffect(expanded) { if (!expanded) query = "" }
+
+    val filtered = remember(query, options) {
+        if (query.isBlank()) options
+        else options.filter { it.second.contains(query, ignoreCase = true) }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -306,9 +315,51 @@ fun WsSelectField(
                 onDismissRequest = { expanded = false },
                 containerColor = WsElevated,
                 modifier = Modifier
-                    .widthIn(min = 200.dp)
-                    .heightIn(max = 300.dp)
+                    .widthIn(min = 220.dp)
+                    .heightIn(max = 360.dp)
             ) {
+                // Campo de busca
+                Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+                    val interaction = remember { MutableInteractionSource() }
+                    BasicTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = WsTextPrimary),
+                        cursorBrush = SolidColor(WsAccent),
+                        interactionSource = interaction,
+                        decorationBox = { innerTextField ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(34.dp)
+                                    .clip(RoundedCornerShape(WsRadius.md))
+                                    .background(WsBackground)
+                                    .border(1.dp, WsBorder, RoundedCornerShape(WsRadius.md))
+                                    .padding(horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(Icons.Default.Search, null, tint = WsTextDisabled, modifier = Modifier.size(14.dp))
+                                Box(modifier = Modifier.weight(1f)) {
+                                    if (query.isEmpty()) {
+                                        Text("Pesquisar...", style = MaterialTheme.typography.bodyMedium, color = WsTextDisabled)
+                                    }
+                                    innerTextField()
+                                }
+                                if (query.isNotEmpty()) {
+                                    Icon(
+                                        Icons.Default.Close, null,
+                                        tint = WsTextDisabled,
+                                        modifier = Modifier.size(14.dp).clickable { query = "" }
+                                    )
+                                }
+                            }
+                        }
+                    )
+                }
+                HorizontalDivider(color = WsBorder)
+
                 if (nullable && selectedId != null) {
                     DropdownMenuItem(
                         text = { Text("— Nenhum —", color = WsTextSecondary) },
@@ -316,19 +367,34 @@ fun WsSelectField(
                     )
                     HorizontalDivider(color = WsBorder)
                 }
-                options.forEach { (id, name) ->
+
+                if (filtered.isEmpty()) {
                     DropdownMenuItem(
                         text = {
                             Text(
-                                name,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = WsTextPrimary
+                                "Nenhum resultado para \"$query\"",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = WsTextDisabled
                             )
                         },
-                        onClick = { onSelect(id); expanded = false }
+                        onClick = {},
+                        enabled = false
                     )
+                } else {
+                    filtered.forEach { (id, name) ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    name,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = WsTextPrimary
+                                )
+                            },
+                            onClick = { onSelect(id); expanded = false }
+                        )
+                    }
                 }
             }
         }
@@ -810,6 +876,211 @@ fun WsFilterChip(
 }
 
 // WsButton e WsIconButton agora definidos em WsControls.kt (Onda 1)
+
+// ── WsMoneyField — campo de valor monetário com máscara BRL (centavos) ───────
+
+private class MoneyMaskTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val digits = text.text.filter { it.isDigit() }
+        val centsLong = digits.toLongOrNull() ?: 0L
+        val reais = centsLong / 100
+        val cents = centsLong % 100
+
+        val reaisFormatted = buildString {
+            val s = reais.toString()
+            s.reversed().forEachIndexed { i, c ->
+                if (i > 0 && i % 3 == 0) append('.')
+                append(c)
+            }
+        }.reversed()
+        val formatted = "$reaisFormatted,${"%02d".format(cents)}"
+
+        val N = digits.length
+        val totalFormattedDigits = maxOf(N, 3)
+
+        val offsetMapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int {
+                if (offset <= 0) return 0
+                val target = (totalFormattedDigits - N + offset - 1).coerceAtLeast(0)
+                var digitCount = 0
+                formatted.forEachIndexed { i, c ->
+                    if (c.isDigit()) {
+                        if (digitCount == target) return i + 1
+                        digitCount++
+                    }
+                }
+                return formatted.length
+            }
+            override fun transformedToOriginal(offset: Int): Int {
+                val placeholder = totalFormattedDigits - N
+                var digitsBefore = 0
+                for (i in 0 until offset.coerceAtMost(formatted.length)) {
+                    if (formatted[i].isDigit()) digitsBefore++
+                }
+                return maxOf(0, digitsBefore - placeholder).coerceAtMost(N)
+            }
+        }
+        return TransformedText(AnnotatedString(formatted), offsetMapping)
+    }
+}
+
+/**
+ * Campo monetário com máscara BRL automática.
+ * [value]: string de dígitos representando centavos ("150045" = R$ 1.500,45).
+ * Use [Money.toCentsStr()] para inicializar e [String.centsToMoney()] para salvar.
+ */
+@Composable
+fun WsMoneyField(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onValueChange: (String) -> Unit,
+) {
+    val digits = value.filter { it.isDigit() }.take(15)
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (enabled) WsTextSecondary else WsTextDisabled
+        )
+        BasicTextField(
+            value = digits,
+            onValueChange = { input -> onValueChange(input.filter(Char::isDigit).take(15)) },
+            enabled = enabled,
+            singleLine = true,
+            visualTransformation = MoneyMaskTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = if (enabled) WsTextPrimary else WsTextSecondary
+            ),
+            cursorBrush = SolidColor(WsAccent),
+            interactionSource = interaction,
+            decorationBox = { innerTextField ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(WsSize.control)
+                        .clip(RoundedCornerShape(WsRadius.md))
+                        .background(if (enabled) WsBackground else WsElevated)
+                        .border(1.dp, if (focused) WsAccent else WsBorder, RoundedCornerShape(WsRadius.md))
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "R$",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (enabled) WsTextSecondary else WsTextDisabled
+                    )
+                    innerTextField()
+                }
+            }
+        )
+    }
+}
+
+// ── WsPhoneField — campo de telefone com máscara (XX) XXXXX-XXXX ─────────────
+
+private class PhoneMaskTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val digits = text.text.filter { it.isDigit() }.take(11)
+        val out = buildString {
+            digits.forEachIndexed { i, c ->
+                when (i) {
+                    0    -> { append('('); append(c) }
+                    2    -> { append(')'); append(' '); append(c) }
+                    6    -> if (digits.length <= 10) { append('-'); append(c) } else append(c)
+                    7    -> if (digits.length == 11) { append('-'); append(c) } else append(c)
+                    else -> append(c)
+                }
+            }
+        }
+        val offsetMapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int {
+                if (offset <= 0) return 0
+                var digitCount = 0
+                out.forEachIndexed { i, c ->
+                    if (c.isDigit()) {
+                        digitCount++
+                        if (digitCount == offset) return i + 1
+                    }
+                }
+                return out.length
+            }
+            override fun transformedToOriginal(offset: Int): Int {
+                var digitCount = 0
+                for (i in 0 until offset.coerceAtMost(out.length)) {
+                    if (out[i].isDigit()) digitCount++
+                }
+                return digitCount.coerceAtMost(digits.length)
+            }
+        }
+        return TransformedText(AnnotatedString(out), offsetMapping)
+    }
+}
+
+/**
+ * Campo de telefone com máscara brasileira.
+ * [value]: dígitos puros (max 11). Ex: "11987654321" exibe "(11) 98765-4321".
+ */
+@Composable
+fun WsPhoneField(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onValueChange: (String) -> Unit,
+) {
+    val digits = value.filter { it.isDigit() }.take(11)
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (enabled) WsTextSecondary else WsTextDisabled
+        )
+        BasicTextField(
+            value = digits,
+            onValueChange = { input -> onValueChange(input.filter(Char::isDigit).take(11)) },
+            enabled = enabled,
+            singleLine = true,
+            visualTransformation = PhoneMaskTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = if (enabled) WsTextPrimary else WsTextSecondary
+            ),
+            cursorBrush = SolidColor(WsAccent),
+            interactionSource = interaction,
+            decorationBox = { innerTextField ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(WsSize.control)
+                        .clip(RoundedCornerShape(WsRadius.md))
+                        .background(if (enabled) WsBackground else WsElevated)
+                        .border(1.dp, if (focused) WsAccent else WsBorder, RoundedCornerShape(WsRadius.md))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    if (digits.isEmpty()) {
+                        Text(
+                            "(XX) XXXXX-XXXX",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = WsTextDisabled
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        )
+    }
+}
 
 @Composable
 fun WsTextField(

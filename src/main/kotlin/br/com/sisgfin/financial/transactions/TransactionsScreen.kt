@@ -34,6 +34,8 @@ import br.com.sisgfin.*
 import br.com.sisgfin.core.ui.keyboard.KeyboardShortcuts
 import br.com.sisgfin.core.ui.notifications.CrudEventEffects
 import br.com.sisgfin.financial.money.MoneyFormatter
+import br.com.sisgfin.financial.money.centsToMoney
+import br.com.sisgfin.financial.money.toCentsStr
 import br.com.sisgfin.financial.money.toMoney
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -602,7 +604,7 @@ fun TransactionQuickPopup(
 ) {
     if (item == null) return
     var description by remember(item.id) { mutableStateOf(item.description) }
-    var amount by remember(item.id) { mutableStateOf(item.amount.toString()) }
+    var amount by remember(item.id) { mutableStateOf(item.amount.toCentsStr()) }
 
     AlertDialog(
         onDismissRequest = onCancel,
@@ -613,14 +615,14 @@ fun TransactionQuickPopup(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 WsTextField("DESCRIÇÃO", description) { description = it }
-                WsTextField("VALOR", amount) { amount = it }
+                WsMoneyField("VALOR (R$)", amount) { amount = it }
                 TransactionStatusBadge(item.status)
                 Text("Status alterado apenas via quitação/cancelamento.", style = MaterialTheme.typography.labelMedium, color = WsTextSecondary)
             }
         },
         confirmButton = {
             WsButton("Salvar", onClick = {
-                onSave(item.copy(description = description, amount = amount.toMoney()))
+                onSave(item.copy(description = description, amount = amount.centsToMoney()))
             })
         },
         dismissButton = { WsButton("Cancelar", variant = WsButtonVariant.TERTIARY, onClick = onCancel) }
@@ -669,10 +671,10 @@ private fun TransferDialog(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(modifier = Modifier.weight(1f)) {
-                        WsTextField("VALOR (R$)", amountText) { amountText = it }
+                        WsMoneyField("VALOR (R$)", amountText) { amountText = it }
                     }
                     Box(modifier = Modifier.weight(1f)) {
-                        WsTextField("DATA (DD/MM/AAAA)", dateText) { dateText = it }
+                        WsDateField("DATA", dateText) { dateText = it }
                     }
                 }
                 WsTextField("DESCRIÇÃO", description) { description = it }
@@ -691,11 +693,13 @@ private fun TransferDialog(
                     if (srcId == null) { errorMsg = "Selecione a conta de origem."; return@run }
                     if (dstId == null) { errorMsg = "Selecione a conta de destino."; return@run }
                     if (srcId == dstId) { errorMsg = "A conta de origem e destino não podem ser iguais."; return@run }
-                    val amount = runCatching { amountText.toMoney() }.getOrElse {
-                        errorMsg = "Valor inválido."; return@run
-                    }
+                    val amount = amountText.centsToMoney()
                     if (amount.isZero() || amount.isNegative()) { errorMsg = "O valor deve ser positivo."; return@run }
-                    val date = runCatching { LocalDate.parse(dateText, dateFormatter).atStartOfDay() }.getOrElse {
+                    val date = runCatching {
+                        val d = dateText.filter { it.isDigit() }
+                        if (d.length == 8) LocalDate.parse(d, DateTimeFormatter.ofPattern("ddMMyyyy")).atStartOfDay()
+                        else LocalDate.parse(dateText, dateFormatter).atStartOfDay()
+                    }.getOrElse {
                         errorMsg = "Data inválida. Use o formato DD/MM/AAAA."; return@run
                     }
                     val desc = description.trim()

@@ -11,7 +11,8 @@ data class StatementFilter(
     val to: LocalDate? = null,
     val type: TransactionType? = null,
     val costCenterId: Int? = null,
-    val categoryId: Int? = null
+    val categoryId: Int? = null,
+    val projectId: Int? = null
 )
 
 data class StatementEntry(

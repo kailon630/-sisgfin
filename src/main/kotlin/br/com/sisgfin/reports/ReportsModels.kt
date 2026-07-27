@@ -2,6 +2,7 @@ package br.com.sisgfin.reports
 
 import br.com.sisgfin.FinancialAccount
 import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.projects.ProjectStatus
 import br.com.sisgfin.financial.transactions.Transaction
 import br.com.sisgfin.financial.transactions.TransactionType
 import java.time.LocalDate
@@ -50,6 +51,8 @@ data class ReportsUiState(
     val balanceteRows: List<BalanceteRow> = emptyList(),
     val demonstrativoFilter: DemonstrativoFilter = DemonstrativoFilter(),
     val demonstrativoRows: List<DemonstrativoRow> = emptyList(),
+    val projectsFilter: ProjectsFilter = ProjectsFilter(),
+    val projectSummaryRows: List<ProjectSummaryRow> = emptyList(),
     val isLoading: Boolean = false,
     val exportMessage: String? = null,
     val errorMessage: String? = null
@@ -95,3 +98,21 @@ val MESES_PT = listOf(
     "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 )
+
+// ── Relatório de Projetos ────────────────────────────────────────────────────
+
+data class ProjectsFilter(
+    val status: ProjectStatus? = null
+)
+
+data class ProjectSummaryRow(
+    val projectId: Int,
+    val code: String,
+    val name: String,
+    val status: ProjectStatus,
+    val budget: Money?,
+    val realized: Money,
+    val executionPct: Double
+) {
+    val isOverBudget: Boolean get() = budget != null && realized > budget
+}

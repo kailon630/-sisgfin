@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import br.com.sisgfin.financial.banking.BankList
 import br.com.sisgfin.financial.money.MoneyFormatter
+import br.com.sisgfin.financial.money.centsToMoney
+import br.com.sisgfin.financial.money.toCentsStr
 import br.com.sisgfin.financial.money.toMoney
 import br.com.sisgfin.employees.EmployeeViewModel
 import br.com.sisgfin.core.ui.notifications.CrudEventEffects
@@ -226,9 +228,9 @@ fun EmployeeEditorPanel(viewModel: EmployeeViewModel, onClose: () -> Unit) {
     var name            by remember(employee.id) { mutableStateOf(employee.name) }
     var document        by remember(employee.id) { mutableStateOf(employee.document) }
     var email           by remember(employee.id) { mutableStateOf(employee.email) }
-    var phone           by remember(employee.id) { mutableStateOf(employee.phone) }
+    var phone           by remember(employee.id) { mutableStateOf(employee.phone.filter { it.isDigit() }) }
     var role            by remember(employee.id) { mutableStateOf(employee.role) }
-    var salary          by remember(employee.id) { mutableStateOf(employee.salary.toString()) }
+    var salary          by remember(employee.id) { mutableStateOf(employee.salary.toCentsStr()) }
     var selectedPaymentDays by remember(employee.id) {
         mutableStateOf(
             employee.paymentDays
@@ -285,7 +287,7 @@ fun EmployeeEditorPanel(viewModel: EmployeeViewModel, onClose: () -> Unit) {
                     email          = email,
                     phone          = phone,
                     role           = role,
-                    salary         = salary.toMoney(),
+                    salary         = salary.centsToMoney(),
                     paymentDay     = selectedPaymentDays.minOrNull() ?: employee.paymentDay,
                     paymentDays    = selectedPaymentDays.sorted().joinToString(",").ifEmpty { null },
                     employmentType = selectedType.label,
@@ -328,8 +330,8 @@ fun EmployeeEditorPanel(viewModel: EmployeeViewModel, onClose: () -> Unit) {
         )
         WsTextField(roleLabel, role) { role = it }
         WsTextField("E-MAIL", email) { email = it }
-        WsTextField("TELEFONE", phone) { phone = it }
-        WsTextField(salaryLabel, salary) { salary = it }
+        WsPhoneField("TELEFONE", phone) { phone = it }
+        WsMoneyField(salaryLabel, salary) { salary = it }
 
         Text(
             "DIAS DE PAGAMENTO AUTOMÁTICO",
@@ -451,9 +453,9 @@ fun EmployeePopup(employee: Employee?, onSave: (Employee) -> Unit, onCancel: () 
     var name         by remember(employee.id) { mutableStateOf(employee.name) }
     var document     by remember(employee.id) { mutableStateOf(employee.document) }
     var email        by remember(employee.id) { mutableStateOf(employee.email) }
-    var phone        by remember(employee.id) { mutableStateOf(employee.phone) }
+    var phone        by remember(employee.id) { mutableStateOf(employee.phone.filter { it.isDigit() }) }
     var role         by remember(employee.id) { mutableStateOf(employee.role) }
-    var salary       by remember(employee.id) { mutableStateOf(employee.salary.toString()) }
+    var salary       by remember(employee.id) { mutableStateOf(employee.salary.toCentsStr()) }
     var paymentDay   by remember(employee.id) { mutableStateOf(employee.paymentDay.toString()) }
 
     val nameLabel   = if (selectedType == EmploymentType.PJ) "RAZÃO SOCIAL" else "NOME COMPLETO"
@@ -523,11 +525,11 @@ fun EmployeePopup(employee: Employee?, onSave: (Employee) -> Unit, onCancel: () 
 
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     WsTextField("E-MAIL", email, Modifier.weight(1f)) { email = it }
-                    WsTextField("TELEFONE", phone, Modifier.weight(1f)) { phone = it }
+                    WsPhoneField("TELEFONE", phone, Modifier.weight(1f)) { phone = it }
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    WsTextField(salaryLabel, salary, Modifier.weight(1f)) { salary = it }
+                    WsMoneyField(salaryLabel, salary, Modifier.weight(1f)) { salary = it }
                     WsTextField("DIA PGTO", paymentDay, Modifier.weight(0.6f)) { paymentDay = it }
                 }
             }
@@ -542,7 +544,7 @@ fun EmployeePopup(employee: Employee?, onSave: (Employee) -> Unit, onCancel: () 
                         email          = email,
                         phone          = phone,
                         role           = role,
-                        salary         = salary.toMoney(),
+                        salary         = salary.centsToMoney(),
                         paymentDay     = paymentDay.toIntOrNull() ?: 1,
                         employmentType = selectedType.label
                     ))

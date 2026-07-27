@@ -81,9 +81,10 @@ compose.desktop {
             targetFormats(
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi,
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Deb,
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.AppImage,
             )
             packageName = "SisgFin"
-            packageVersion = "1.0.7"
+            packageVersion = "1.0.8"
             description = "Sistema de Gestão Financeira"
             vendor = "Associação Terapêutica Cannabis Medicinal Flor da Vida"
             copyright = "© 2025 Flor da Vida. Todos os direitos reservados."

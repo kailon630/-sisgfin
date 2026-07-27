@@ -6,6 +6,7 @@ import br.com.sisgfin.SupplierRepository
 import br.com.sisgfin.budget.BudgetItemRepository
 import br.com.sisgfin.financial.categories.ExpenseCategoryRepository
 import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.projects.ProjectRepository
 import br.com.sisgfin.financial.transactions.TransactionRepository
 import br.com.sisgfin.financial.transactions.TransactionType
 import kotlinx.coroutines.CoroutineScope
@@ -25,7 +26,8 @@ class ReportsViewModel(
     private val accountRepository: FinancialAccountRepository,
     private val budgetRepository: BudgetItemRepository,
     private val costCenterRepository: CostCenterRepository,
-    private val categoryRepository: ExpenseCategoryRepository
+    private val categoryRepository: ExpenseCategoryRepository,
+    private val projectRepository: ProjectRepository? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -41,6 +43,7 @@ class ReportsViewModel(
             applyLivroDiarioFilter(_uiState.value.livroDiarioFilter)
             applyBalanceteFilter(_uiState.value.balanceteFilter)
             applyDemonstrativoFilter(_uiState.value.demonstrativoFilter)
+            applyProjectsFilter(_uiState.value.projectsFilter)
         }
     }
 
@@ -176,6 +179,44 @@ class ReportsViewModel(
                 _uiState.value = _uiState.value.copy(
                     demonstrativoRows = rows, isLoading = false, errorMessage = null
                 )
+            }.onFailure { e ->
+                _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = e.message)
+            }
+        }
+    }
+
+    // ── Relatório de Projetos ─────────────────────────────────────────────────
+
+    fun applyProjectsFilter(filter: ProjectsFilter) {
+        _uiState.value = _uiState.value.copy(projectsFilter = filter, isLoading = true)
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val repo = projectRepository ?: return@withContext emptyList<ProjectSummaryRow>()
+                    val projects = if (filter.status != null) {
+                        repo.findAll().filter { it.status == filter.status && it.isActive }
+                    } else {
+                        repo.findAllActive()
+                    }
+                    projects.map { project ->
+                        val realized = transactionRepository.sumRealizedByProject(project.id)
+                        val budget = project.budget
+                        val pct = if (budget != null && !budget.isZero()) {
+                            realized.value.toDouble() / budget.value.toDouble() * 100.0
+                        } else 0.0
+                        ProjectSummaryRow(
+                            projectId    = project.id,
+                            code         = project.code,
+                            name         = project.name,
+                            status       = project.status,
+                            budget       = budget,
+                            realized     = realized,
+                            executionPct = pct
+                        )
+                    }.sortedBy { it.name }
+                }
+            }.onSuccess { rows ->
+                _uiState.value = _uiState.value.copy(projectSummaryRows = rows, isLoading = false, errorMessage = null)
             }.onFailure { e ->
                 _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = e.message)
             }

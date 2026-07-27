@@ -121,7 +121,7 @@ fun ClientDetailsPanel(viewModel: ClientsViewModel, onClose: () -> Unit) {
     var tradeName  by remember(item.id) { mutableStateOf(item.tradeName ?: "") }
     var document   by remember(item.id) { mutableStateOf(item.document) }
     var email      by remember(item.id) { mutableStateOf(item.email ?: "") }
-    var phone      by remember(item.id) { mutableStateOf(item.phone ?: "") }
+    var phone      by remember(item.id) { mutableStateOf((item.phone ?: "").filter { it.isDigit() }) }
     var pixKey     by remember(item.id) { mutableStateOf(item.pixKey ?: "") }
     var entityType by remember(item.id) { mutableStateOf(item.entityType) }
 
@@ -174,7 +174,7 @@ fun ClientDetailsPanel(viewModel: ClientsViewModel, onClose: () -> Unit) {
         }
         DetailSection("Contato") {
             WsTextField("E-MAIL", email) { email = it }
-            WsTextField("TELEFONE", phone) { phone = it }
+            WsPhoneField("TELEFONE", phone) { phone = it }
         }
         DetailSection("Financeiro") {
             WsTextField("CHAVE PIX", pixKey) { pixKey = it }

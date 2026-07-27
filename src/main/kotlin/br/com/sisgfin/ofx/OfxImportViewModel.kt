@@ -119,6 +119,10 @@ class OfxImportViewModel(
         }
     }
 
+    fun loadFile(file: File) {
+        viewModelScope.launch(Dispatchers.IO) { parseFile(file) }
+    }
+
     fun selectAccount(id: Int?) {
         _selectedAccountId.value = id
         val preview = _step.value as? Step.Preview ?: return

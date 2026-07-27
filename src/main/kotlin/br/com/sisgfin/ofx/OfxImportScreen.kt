@@ -17,9 +17,15 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.ui.draganddrop.awtTransferable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -31,6 +37,8 @@ import br.com.sisgfin.financial.money.MoneyFormatter
 import br.com.sisgfin.financial.transactions.Transaction
 import br.com.sisgfin.financial.transactions.TransactionStatus
 import br.com.sisgfin.financial.transactions.TransactionType
+import java.awt.datatransfer.DataFlavor
+import java.io.File
 import java.time.format.DateTimeFormatter
 
 private val dateFmt     = DateTimeFormatter.ofPattern("dd/MM/yyyy")
@@ -71,6 +79,7 @@ fun OfxImportScreen(
                     errorMessage  = errorMessage,
                     importHistory = importHistory,
                     onSelectFile  = { viewModel.selectFile() },
+                    onDropFile    = { viewModel.loadFile(it) },
                     onSelectAccount = { viewModel.selectAccount(it) }
                 )
 
@@ -113,6 +122,7 @@ fun OfxImportScreen(
 
 // ── Etapa 1: Seleção de arquivo ───────────────────────────────────────────────
 
+@OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun SelectFileStep(
     accounts: List<br.com.sisgfin.FinancialAccount>,
@@ -121,9 +131,33 @@ private fun SelectFileStep(
     errorMessage: String?,
     importHistory: List<OfxImport>,
     onSelectFile: () -> Unit,
+    onDropFile: (File) -> Unit,
     onSelectAccount: (Int?) -> Unit
 ) {
     val accountOptions = remember(accounts) { accounts.map { it.id to it.name } }
+    val isDragOverState = remember { mutableStateOf(false) }
+    val isDragOver by isDragOverState
+    val currentOnDropFile = rememberUpdatedState(onDropFile)
+    val dragTarget = remember {
+        object : DragAndDropTarget {
+            override fun onStarted(event: DragAndDropEvent) { isDragOverState.value = true }
+            override fun onExited(event: DragAndDropEvent)  { isDragOverState.value = false }
+            override fun onEnded(event: DragAndDropEvent)   { isDragOverState.value = false }
+            override fun onDrop(event: DragAndDropEvent): Boolean {
+                isDragOverState.value = false
+                runCatching {
+                    val transferable = event.awtTransferable
+                    if (transferable.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+                        @Suppress("UNCHECKED_CAST")
+                        val files = transferable.getTransferData(DataFlavor.javaFileListFlavor) as? List<File>
+                        files?.firstOrNull { it.extension.equals("ofx", ignoreCase = true) }
+                            ?.let { currentOnDropFile.value(it) }
+                    }
+                }
+                return true
+            }
+        }
+    }
 
     // Cabeçalho
     Text("Importar Extrato OFX", style = MaterialTheme.typography.headlineMedium)
@@ -132,13 +166,21 @@ private fun SelectFileStep(
         style = MaterialTheme.typography.bodyMedium, color = WsTextSecondary
     )
 
-    // Card de seleção
+    // Card de seleção + zona de drag & drop
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .border(1.dp, WsBorder, RoundedCornerShape(8.dp))
-            .background(WsSurface)
+            .border(
+                width = if (isDragOver) 2.dp else 1.dp,
+                color = if (isDragOver) WsAccent else WsBorder,
+                shape = RoundedCornerShape(8.dp)
+            )
+            .background(if (isDragOver) WsAccent.copy(alpha = 0.05f) else WsSurface)
+            .dragAndDropTarget(
+                shouldStartDragAndDrop = { true },
+                target = dragTarget
+            )
             .padding(32.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -147,14 +189,18 @@ private fun SelectFileStep(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Icon(
-                Icons.Outlined.CloudUpload, null,
+                if (isDragOver) Icons.Default.FileDownload else Icons.Outlined.CloudUpload,
+                null,
                 modifier = Modifier.size(48.dp),
-                tint = WsTextDisabled
+                tint = if (isDragOver) WsAccent else WsTextDisabled
             )
             Text(
-                "Selecione um arquivo .ofx gerado pelo seu banco",
+                if (isDragOver)
+                    "Solte o arquivo .ofx aqui"
+                else
+                    "Arraste um arquivo .ofx aqui ou selecione pelo botão abaixo",
                 style = MaterialTheme.typography.bodyMedium,
-                color = WsTextSecondary,
+                color = if (isDragOver) WsAccent else WsTextSecondary,
                 textAlign = TextAlign.Center
             )
 
@@ -174,8 +220,9 @@ private fun SelectFileStep(
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
             } else {
                 WsButton(
-                    text = "Selecionar arquivo...",
-                    icon  = Icons.Default.FolderOpen,
+                    text    = "Selecionar arquivo...",
+                    icon    = Icons.Default.FolderOpen,
+                    variant = WsButtonVariant.SECONDARY,
                     onClick = onSelectFile
                 )
             }
@@ -1052,7 +1099,9 @@ private fun QuickPayDialog(
 ) {
     var payDate by remember { mutableStateOf(java.time.LocalDate.now().format(dateFmt)) }
     val parsed  = runCatching {
-        java.time.LocalDate.parse(payDate, dateFmt)
+        val digits = payDate.filter { it.isDigit() }
+        if (digits.length == 8) java.time.LocalDate.parse(digits, java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"))
+        else java.time.LocalDate.parse(payDate, dateFmt)
     }.getOrNull()
     val dateError = when {
         parsed == null -> "Data inválida"
@@ -1072,7 +1121,7 @@ private fun QuickPayDialog(
                     "Valor: ${MoneyFormatter.format(tx.amount)}",
                     style = MaterialTheme.typography.bodyMedium, color = WsTextSecondary
                 )
-                WsTextField("DATA DE PAGAMENTO (DD/MM/AAAA)", payDate) { payDate = it }
+                WsDateField("DATA DE PAGAMENTO", payDate) { payDate = it }
                 if (dateError != null) {
                     Text(dateError, style = MaterialTheme.typography.labelMedium, color = WsDanger)
                 }

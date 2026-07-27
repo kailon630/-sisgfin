@@ -22,6 +22,8 @@ import br.com.sisgfin.contracts.Contract
 import br.com.sisgfin.recurrence.RecurrenceInterval
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.MoneyFormatter
+import br.com.sisgfin.financial.money.centsToMoney
+import br.com.sisgfin.financial.money.toCentsStr
 import br.com.sisgfin.financial.money.toMoney
 import br.com.sisgfin.financial.transactions.timeline.TransactionTimelineEvent
 import br.com.sisgfin.financial.transactions.workflow.TransactionStateMachine
@@ -43,6 +45,7 @@ fun TransactionDetailsPanel(
     val suppliers by viewModel.suppliers.collectAsState()
     val costCenters by viewModel.costCenters.collectAsState()
     val categories by viewModel.categories.collectAsState()
+    val projects by viewModel.projects.collectAsState()
     val timeline by viewModel.timeline.collectAsState()
     val operationError by viewModel.operationError.collectAsState()
     val budgetBalance by viewModel.budgetBalance.collectAsState()
@@ -53,11 +56,12 @@ fun TransactionDetailsPanel(
 
     // Form state — reset when item changes
     var description by remember(item.id) { mutableStateOf(item.description) }
-    var amountStr by remember(item.id) { mutableStateOf(item.amount.toString()) }
+    var amountStr by remember(item.id) { mutableStateOf(item.amount.toCentsStr()) }
     var type by remember(item.id) { mutableStateOf(item.type) }
     var accountId by remember(item.id) { mutableStateOf(item.accountId) }
     var supplierId by remember(item.id) { mutableStateOf(item.supplierId) }
     var costCenterId by remember(item.id) { mutableStateOf(item.costCenterId) }
+    var projectId by remember(item.id) { mutableStateOf(item.projectId) }
     var categoryId by remember(item.id) { mutableStateOf(item.categoryId) }
     var issueDate by remember(item.id) { mutableStateOf(item.issueDate.toLocalDate().format(dateFormatter)) }
     var dueDate by remember(item.id) { mutableStateOf(item.dueDate.toLocalDate().format(dateFormatter)) }
@@ -90,6 +94,7 @@ fun TransactionDetailsPanel(
     val accountName = accounts.find { it.id == item.accountId }?.name ?: "—"
     val supplierName = suppliers.find { it.id == item.supplierId }?.name
     val costCenterName = costCenters.find { it.id == item.costCenterId }?.name
+    val projectName = projects.find { it.id == item.projectId }?.name
     val categoryName = categories.find { it.id == item.categoryId }?.name
     val canEdit = item.id == 0 || !TransactionStateMachine.isTerminal(item.status)
 
@@ -104,6 +109,7 @@ fun TransactionDetailsPanel(
         }
         .map { it.id to it.name }
     val costCenterOptions = costCenters.map { it.id to it.name }
+    val projectOptions = projects.map { it.id to it.name }
     val categoryOptions = categories.map { it.id to it.name }
 
     BaseCrudPanel(
@@ -121,12 +127,13 @@ fun TransactionDetailsPanel(
                 viewModel.saveWithRecurrence(
                     item = item.copy(
                         description = description,
-                        amount = amountStr.toMoney(),
+                        amount = amountStr.centsToMoney(),
                         type = type,
                         status = if (item.id == 0) TransactionStatus.PENDING else item.status,
                         accountId = accId,
                         supplierId = supplierId,
                         costCenterId = costCenterId,
+                        projectId = projectId,
                         categoryId = categoryId,
                         issueDate = parseDate(issueDate).atStartOfDay(),
                         dueDate = parseDate(dueDate).atStartOfDay(),
@@ -167,6 +174,7 @@ fun TransactionDetailsPanel(
             SummaryRow("Conta", accountName)
             supplierName?.let { SummaryRow("Fornecedor", it) }
             costCenterName?.let { SummaryRow("Centro de Custo", it) }
+            projectName?.let { SummaryRow("Projeto", it) }
             categoryName?.let { SummaryRow("Categoria", it) }
             item.documentType?.let { dt ->
                 SummaryRow("Documento", "$dt ${item.documentNumber ?: ""}".trim())
@@ -227,7 +235,7 @@ fun TransactionDetailsPanel(
                 WsTextField("DESCRIÇÃO", description) { description = it }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    WsTextField("VALOR (R$)", amountStr, modifier = Modifier.weight(1f)) { amountStr = it }
+                    WsMoneyField("VALOR (R$)", amountStr, modifier = Modifier.weight(1f)) { amountStr = it }
                     WsTextField("PARCELAS", installmentTotalStr, modifier = Modifier.weight(1f)) {
                         installmentTotalStr = it
                     }
@@ -237,8 +245,8 @@ fun TransactionDetailsPanel(
                 BudgetOverrunWarning(amountStr, budgetBalance)
 
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    WsTextField("EMISSÃO (DD/MM/AAAA)", issueDate, modifier = Modifier.weight(1f)) { issueDate = it }
-                    WsTextField("VENCIMENTO (DD/MM/AAAA)", dueDate, modifier = Modifier.weight(1f)) { dueDate = it }
+                    WsDateField("EMISSÃO", issueDate, modifier = Modifier.weight(1f)) { issueDate = it }
+                    WsDateField("VENCIMENTO", dueDate, modifier = Modifier.weight(1f)) { dueDate = it }
                 }
 
                 // Tipo
@@ -349,6 +357,14 @@ fun TransactionDetailsPanel(
                         onSelect = { costCenterId = it }
                     )
                 }
+                if (projectOptions.isNotEmpty()) {
+                    WsSelectField(
+                        label = "PROJETO",
+                        options = projectOptions,
+                        selectedId = projectId,
+                        onSelect = { projectId = it }
+                    )
+                }
                 if (categoryOptions.isNotEmpty()) {
                     WsSelectField(
                         label = "CATEGORIA",
@@ -449,11 +465,7 @@ fun TransactionDetailsPanel(
 private fun BudgetOverrunWarning(amountStr: String, balance: BudgetBalance?) {
     if (balance == null) return
 
-    val parsedAmount = remember(amountStr) {
-        amountStr.replace(",", ".").toBigDecimalOrNull()
-            ?.let { br.com.sisgfin.financial.money.Money(it) }
-            ?: br.com.sisgfin.financial.money.Money.ZERO
-    }
+    val parsedAmount = remember(amountStr) { amountStr.centsToMoney() }
 
     // Sem valor digitado ou zero — sem aviso
     if (parsedAmount.isZero()) return
@@ -630,7 +642,7 @@ fun PaymentRecordDialog(
     onDismiss: () -> Unit,
     onConfirm: (LocalDateTime, Money, Money?, Money?) -> Unit
 ) {
-    var paidStr by remember { mutableStateOf(totalAmount.toString()) }
+    var paidStr by remember { mutableStateOf(totalAmount.toCentsStr()) }
     var interestStr by remember { mutableStateOf("") }
     var fineStr by remember { mutableStateOf("") }
     var payDate by remember { mutableStateOf(LocalDate.now().format(dateFormatter)) }
@@ -648,10 +660,10 @@ fun PaymentRecordDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Valor original: ${MoneyFormatter.format(totalAmount)}", color = WsTextSecondary)
-                WsTextField("VALOR PAGO (R$)", paidStr) { paidStr = it }
-                WsTextField("JUROS (R$) — opcional", interestStr) { interestStr = it }
-                WsTextField("MULTA (R$) — opcional", fineStr) { fineStr = it }
-                WsTextField("DATA DE PAGAMENTO (DD/MM/AAAA)", payDate) { payDate = it }
+                WsMoneyField("VALOR PAGO (R$)", paidStr) { paidStr = it }
+                WsMoneyField("JUROS (R$) — opcional", interestStr) { interestStr = it }
+                WsMoneyField("MULTA (R$) — opcional", fineStr) { fineStr = it }
+                WsDateField("DATA DE PAGAMENTO", payDate) { payDate = it }
                 if (dateError != null) {
                     Text(
                         dateError,
@@ -664,9 +676,9 @@ fun PaymentRecordDialog(
         confirmButton = {
             WsButton("Confirmar", onClick = {
                 if (dateError == null) {
-                    val interest = interestStr.trim().takeIf { it.isNotEmpty() }?.toMoney()
-                    val fine = fineStr.trim().takeIf { it.isNotEmpty() }?.toMoney()
-                    onConfirm(parsedDate.atStartOfDay(), paidStr.toMoney(), interest, fine)
+                    val interest = interestStr.takeIf { it.isNotEmpty() }?.centsToMoney()
+                    val fine = fineStr.takeIf { it.isNotEmpty() }?.centsToMoney()
+                    onConfirm(parsedDate.atStartOfDay(), paidStr.centsToMoney(), interest, fine)
                 }
             })
         },
@@ -737,9 +749,13 @@ fun ReversalDialog(
     )
 }
 
-private fun parseDate(value: String): LocalDate =
-    try {
-        LocalDate.parse(value, DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-    } catch (_: Exception) {
-        try { LocalDate.parse(value) } catch (_: Exception) { LocalDate.now() }
+private fun parseDate(value: String): LocalDate {
+    val s = value.trim()
+    val digits = s.filter { it.isDigit() }
+    if (digits.length == 8) {
+        runCatching { return LocalDate.parse(digits, DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrNull()?.let { return it }
     }
+    runCatching { return LocalDate.parse(s, DateTimeFormatter.ofPattern("dd/MM/yyyy")) }.getOrNull()?.let { return it }
+    runCatching { return LocalDate.parse(s) }.getOrNull()?.let { return it }
+    return LocalDate.now()
+}

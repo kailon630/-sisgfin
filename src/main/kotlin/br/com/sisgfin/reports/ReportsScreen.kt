@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import br.com.sisgfin.*
 import br.com.sisgfin.financial.money.MoneyFormatter
 import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.projects.ProjectStatus
 import br.com.sisgfin.financial.transactions.TransactionType
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -54,7 +55,7 @@ fun ReportsScreen(viewModel: ReportsViewModel) {
             Column {
                 Text("Relatórios", style = MaterialTheme.typography.headlineMedium)
                 Text(
-                    "Livro Diário, Balancete e Demonstrativo Financeiro",
+                    "Livro Diário, Balancete, Demonstrativo e Projetos",
                     style = MaterialTheme.typography.bodyMedium,
                     color = WsTextSecondary
                 )
@@ -100,6 +101,9 @@ fun ReportsScreen(viewModel: ReportsViewModel) {
             Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 }) {
                 Text("Demonstrativo", modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Medium)
             }
+            Tab(selected = selectedTab == 3, onClick = { selectedTab = 3 }) {
+                Text("Projetos", modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Medium)
+            }
         }
 
         AnimatedContent(targetState = selectedTab) { tab ->
@@ -107,6 +111,7 @@ fun ReportsScreen(viewModel: ReportsViewModel) {
                 0 -> LivroDiarioTab(state, viewModel)
                 1 -> BalanceteTab(state, viewModel)
                 2 -> DemonstrativoTab(state, viewModel)
+                3 -> ProjectsTab(state, viewModel)
             }
         }
     }
@@ -131,8 +136,8 @@ private fun LivroDiarioTab(state: ReportsUiState, viewModel: ReportsViewModel) {
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Bottom) {
-                    WsTextField("DE (DD/MM/AAAA)", fromStr, modifier = Modifier.weight(1f)) { fromStr = it }
-                    WsTextField("ATÉ (DD/MM/AAAA)", toStr, modifier = Modifier.weight(1f)) { toStr = it }
+                    WsDateField("DE", fromStr, modifier = Modifier.weight(1f)) { fromStr = it }
+                    WsDateField("ATÉ", toStr, modifier = Modifier.weight(1f)) { toStr = it }
                     Box(modifier = Modifier.weight(1.5f)) {
                         WsSelectField(
                             label = "CONTA (opcional)",
@@ -521,8 +526,8 @@ private fun DemonstrativoTab(state: ReportsUiState, viewModel: ReportsViewModel)
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Bottom) {
-                    WsTextField("DE (DD/MM/AAAA)", fromStr, modifier = Modifier.weight(1f)) { fromStr = it }
-                    WsTextField("ATÉ (DD/MM/AAAA)", toStr, modifier = Modifier.weight(1f)) { toStr = it }
+                    WsDateField("DE", fromStr, modifier = Modifier.weight(1f)) { fromStr = it }
+                    WsDateField("ATÉ", toStr, modifier = Modifier.weight(1f)) { toStr = it }
                     WsButton("Filtrar", icon = Icons.Default.Search, onClick = {
                         val from = parseDate(fromStr) ?: filter.from
                         val to   = parseDate(toStr)   ?: filter.to
@@ -697,4 +702,190 @@ private fun DemonstrativoTable(rows: List<DemonstrativoRow>) {
     }
 }
 
-private fun parseDate(s: String): LocalDate? = runCatching { LocalDate.parse(s.trim(), dateFmt) }.getOrNull()
+// ── Relatório de Projetos ──────────────────────────────────────────────────────
+
+@Composable
+private fun ProjectsTab(state: ReportsUiState, viewModel: ReportsViewModel) {
+    val filter = state.projectsFilter
+    val statusOptions: List<Pair<Int, String>> = ProjectStatus.entries.map { it.ordinal to it.label }
+
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            color = WsSurface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, WsBorder)
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Box(modifier = Modifier.width(200.dp)) {
+                    WsSelectField(
+                        label = "STATUS (opcional)",
+                        options = statusOptions,
+                        selectedId = filter.status?.ordinal,
+                        onSelect = { id ->
+                            val status = id?.let { ProjectStatus.entries[it] }
+                            viewModel.applyProjectsFilter(filter.copy(status = status))
+                        },
+                        nullable = true,
+                        placeholder = "Todos os status"
+                    )
+                }
+                WsButton("Atualizar", icon = Icons.Default.Refresh, onClick = {
+                    viewModel.applyProjectsFilter(filter)
+                })
+                Spacer(Modifier.weight(1f))
+                if (state.projectSummaryRows.isNotEmpty()) {
+                    val totBudget   = state.projectSummaryRows.mapNotNull { it.budget }.fold(Money.ZERO) { a, m -> a + m }
+                    val totRealized = state.projectSummaryRows.fold(Money.ZERO) { a, r -> a + r.realized }
+                    Text(
+                        "Orçado: ${MoneyFormatter.format(totBudget)}  |  Realizado: ${MoneyFormatter.format(totRealized)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = WsTextSecondary,
+                        modifier = Modifier.align(Alignment.CenterVertically)
+                    )
+                }
+            }
+        }
+
+        if (state.isLoading) {
+            WsLoaderFullscreen()
+        } else if (state.projectSummaryRows.isEmpty()) {
+            EmptyState("Nenhum projeto ativo encontrado. Cadastre projetos em Projetos.")
+        } else {
+            ProjectsReportTable(state.projectSummaryRows)
+        }
+    }
+}
+
+@Composable
+private fun ProjectsReportTable(rows: List<ProjectSummaryRow>) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(8.dp))
+            .border(1.dp, WsBorder, RoundedCornerShape(8.dp))
+            .background(WsSurface)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().background(WsElevated).padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TableHeaderCell("CÓDIGO",      Modifier.width(90.dp))
+                TableHeaderCell("PROJETO",     Modifier.weight(2f))
+                TableHeaderCell("STATUS",      Modifier.width(110.dp))
+                TableHeaderCell("ORÇAMENTO",   Modifier.width(120.dp), TextAlign.End)
+                TableHeaderCell("REALIZADO",   Modifier.width(120.dp), TextAlign.End)
+                TableHeaderCell("% EXECUÇÃO",  Modifier.width(90.dp),  TextAlign.Center)
+            }
+            HorizontalDivider(color = WsBorder)
+
+            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                items(rows, key = { it.projectId }) { row ->
+                    ProjectSummaryRow(row)
+                    HorizontalDivider(color = WsBorder.copy(alpha = 0.35f))
+                }
+            }
+
+            // Footer
+            HorizontalDivider(color = WsBorder)
+            val totBudget   = rows.mapNotNull { it.budget }.fold(Money.ZERO) { a, m -> a + m }
+            val totRealized = rows.fold(Money.ZERO) { a, r -> a + r.realized }
+            Row(
+                modifier = Modifier.fillMaxWidth().background(WsElevated).padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "${rows.size} projeto(s)",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = WsTextSecondary
+                )
+                Spacer(Modifier.width(110.dp))
+                MoneyCell(totBudget,   width = 120, bold = true)
+                MoneyCell(totRealized, width = 120, bold = true)
+                Spacer(Modifier.width(90.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProjectSummaryRow(row: ProjectSummaryRow) {
+    val statusColor = when (row.status) {
+        ProjectStatus.EM_ANDAMENTO -> WsAccent
+        ProjectStatus.CONCLUIDO    -> WsSuccess
+        ProjectStatus.CANCELADO    -> WsDanger
+        ProjectStatus.PLANEJAMENTO -> WsTextSecondary
+    }
+    val pctColor = when {
+        row.executionPct > 100 -> WsDanger
+        row.executionPct > 85  -> WsWarning
+        else -> WsAccent
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            row.code,
+            modifier = Modifier.width(90.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = WsTextSecondary
+        )
+        Text(
+            row.name,
+            modifier = Modifier.weight(2f),
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Box(modifier = Modifier.width(110.dp)) {
+            Surface(shape = RoundedCornerShape(4.dp), color = statusColor.copy(alpha = 0.1f)) {
+                Text(
+                    row.status.label,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = statusColor
+                )
+            }
+        }
+        Text(
+            row.budget?.let { MoneyFormatter.format(it) } ?: "—",
+            modifier = Modifier.width(120.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = WsTextSecondary,
+            textAlign = TextAlign.End
+        )
+        MoneyCell(row.realized, width = 120, colored = row.isOverBudget)
+        Box(modifier = Modifier.width(90.dp), contentAlignment = Alignment.Center) {
+            if (row.budget != null) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("%.1f%%".format(row.executionPct),
+                        style = MaterialTheme.typography.labelSmall, color = pctColor)
+                    LinearProgressIndicator(
+                        progress = { (row.executionPct / 100.0).toFloat().coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)),
+                        color = pctColor,
+                        trackColor = WsBorder
+                    )
+                }
+            } else {
+                Text("—", style = MaterialTheme.typography.labelSmall, color = WsTextDisabled)
+            }
+        }
+    }
+}
+
+private fun parseDate(s: String): LocalDate? {
+    val digits = s.trim().filter { it.isDigit() }
+    if (digits.length == 8) {
+        runCatching { return LocalDate.parse(digits, DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrNull()?.let { return it }
+    }
+    return runCatching { LocalDate.parse(s.trim(), dateFmt) }.getOrNull()
+}

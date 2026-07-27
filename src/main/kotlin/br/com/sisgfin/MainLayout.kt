@@ -28,6 +28,8 @@ import br.com.sisgfin.statement.StatementScreen
 import br.com.sisgfin.statement.StatementViewModel
 import br.com.sisgfin.dashboard.DashboardViewModel
 import br.com.sisgfin.employees.EmployeeViewModel
+import br.com.sisgfin.financial.projects.ProjectViewModel
+import br.com.sisgfin.financial.projects.ProjectsScreen
 import br.com.sisgfin.projects.CostCenterViewModel
 import br.com.sisgfin.financial.categories.CategoriesScreen
 import br.com.sisgfin.financial.categories.ExpenseCategoryViewModel
@@ -73,6 +75,7 @@ fun MainLayout(
     contractViewModel: ContractViewModel,
     clientsViewModel: ClientsViewModel,
     receivablesViewModel: ReceivablesViewModel,
+    projectsViewModel: ProjectViewModel,
     isDarkTheme: Boolean = true,
     onToggleTheme: () -> Unit = {}
 ) {
@@ -123,6 +126,7 @@ fun MainLayout(
                 is Screen.Budget         -> "Orçamento"
                 is Screen.Suppliers      -> "Fornecedores"
                 is Screen.CostCenters    -> "Centros de Custo"
+                is Screen.Projects       -> "Projetos"
                 is Screen.Categories     -> "Plano de Contas"
                 is Screen.Employees      -> "Funcionários"
                 is Screen.UserManagement -> "Usuários"
@@ -192,6 +196,11 @@ fun MainLayout(
                             )
                             is Screen.CostCenters -> CostCentersScreen(
                                 costCenterViewModel,
+                                onShowRightPanel = { rightPanelContent = it },
+                                onCloseRightPanel = { rightPanelContent = null }
+                            )
+                            is Screen.Projects -> ProjectsScreen(
+                                viewModel = projectsViewModel,
                                 onShowRightPanel = { rightPanelContent = it },
                                 onCloseRightPanel = { rightPanelContent = null }
                             )

@@ -181,6 +181,7 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             it[FinancialTransactionsTable.contractId]           = entity.contractId
             it[FinancialTransactionsTable.interestAmount]       = entity.interestAmount?.value
             it[FinancialTransactionsTable.fineAmount]           = entity.fineAmount?.value
+            it[FinancialTransactionsTable.projectId]            = entity.projectId
         } get FinancialTransactionsTable.id
     }
 
@@ -213,6 +214,7 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
                 it[FinancialTransactionsTable.contractId]           = entity.contractId
                 it[FinancialTransactionsTable.interestAmount]       = entity.interestAmount?.value
                 it[FinancialTransactionsTable.fineAmount]           = entity.fineAmount?.value
+                it[FinancialTransactionsTable.projectId]            = entity.projectId
                 // employeeId não é atualizado via update geral — é definido apenas na criação
             }
         }
@@ -421,7 +423,8 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
         to: LocalDate? = null,
         type: TransactionType? = null,
         costCenterId: Int? = null,
-        categoryId: Int? = null
+        categoryId: Int? = null,
+        projectId: Int? = null
     ): List<Transaction> = transaction {
         FinancialTransactionsTable.selectAll()
             .where {
@@ -434,6 +437,7 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
                 type?.let { tp -> cond = cond and (FinancialTransactionsTable.type eq tp.name) }
                 costCenterId?.let { pid -> cond = cond and (FinancialTransactionsTable.costCenterId eq pid) }
                 categoryId?.let { cid -> cond = cond and (FinancialTransactionsTable.categoryId eq cid) }
+                projectId?.let { pjid -> cond = cond and (FinancialTransactionsTable.projectId eq pjid) }
                 cond
             }
             .orderBy(
@@ -441,6 +445,18 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
                 FinancialTransactionsTable.id to SortOrder.ASC
             )
             .map { rowToTransaction(it) }
+    }
+
+    fun sumRealizedByProject(projectId: Int): br.com.sisgfin.financial.money.Money = transaction {
+        val sumExpr = FinancialTransactionsTable.paidAmount.sum()
+        val result = FinancialTransactionsTable.select(sumExpr)
+            .where {
+                (FinancialTransactionsTable.projectId eq projectId) and
+                (FinancialTransactionsTable.status eq TransactionStatus.PAID.name) and
+                (FinancialTransactionsTable.isActive eq true)
+            }
+            .firstOrNull()?.get(sumExpr)
+        result?.toMoney() ?: br.com.sisgfin.financial.money.Money.ZERO
     }
 
     // Extrato: saldo antes de uma data (para saldo de abertura do período)
@@ -623,7 +639,8 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
         recurrenceTemplateId  = row[FinancialTransactionsTable.recurrenceTemplateId],
         contractId            = row[FinancialTransactionsTable.contractId],
         interestAmount        = row[FinancialTransactionsTable.interestAmount]?.toMoney(),
-        fineAmount            = row[FinancialTransactionsTable.fineAmount]?.toMoney()
+        fineAmount            = row[FinancialTransactionsTable.fineAmount]?.toMoney(),
+        projectId             = row[FinancialTransactionsTable.projectId]
     )
 
     // Fase 7-B: soma paidAmount das transações PAID vinculadas ao contrato

@@ -3,6 +3,7 @@ package br.com.sisgfin.di
 import br.com.sisgfin.*
 import br.com.sisgfin.financial.categories.ExpenseCategoryRepository
 import br.com.sisgfin.budget.BudgetItemRepository
+import br.com.sisgfin.financial.projects.ProjectRepository
 import br.com.sisgfin.ofx.OfxImportRepository
 import br.com.sisgfin.contracts.ContractRepository
 import br.com.sisgfin.recurrence.RecurrenceTemplateRepository
@@ -23,4 +24,5 @@ val repositoryModule = module {
     single { OfxImportRepository() }
     single { RecurrenceTemplateRepository() }
     single { ContractRepository() }
+    single { ProjectRepository() }
 }

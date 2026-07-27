@@ -20,6 +20,7 @@ object RecurrenceTemplatesTable : Table("recurrence_templates") {
     val endsAt       = datetime("ends_at").nullable()
     val isActive     = bool("is_active").default(true)
     val contractId   = integer("contract_id").nullable()
+    val projectId    = integer("financial_project_id").nullable()
     val createdBy    = integer("created_by").nullable()
     val createdAt    = datetime("created_at")
     val updatedAt    = datetime("updated_at")

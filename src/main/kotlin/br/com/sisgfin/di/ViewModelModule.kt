@@ -11,6 +11,7 @@ import br.com.sisgfin.financial.transactions.TransactionsViewModel
 import br.com.sisgfin.ofx.OfxImportViewModel
 import br.com.sisgfin.payroll.PayrollImportViewModel
 import br.com.sisgfin.presentation.viewmodel.LoginViewModel
+import br.com.sisgfin.financial.projects.ProjectViewModel
 import br.com.sisgfin.projects.CostCenterViewModel
 import br.com.sisgfin.clients.ClientsViewModel
 import br.com.sisgfin.contracts.ContractViewModel
@@ -31,13 +32,14 @@ val viewModelModule = module {
     factory { FinancialAccountViewModel(get()) }
     factory { CostCenterViewModel(get()) }
     factory { ExpenseCategoryViewModel(get()) }
-    factory { TransactionsViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    factory { TransactionsViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     factory { ContractViewModel(get(), get()) }
-    factory { RecurringViewModel(get(), get(), get(), get()) }
+    factory { RecurringViewModel(get(), get(), get(), get(), get(), get()) }
     factory { BalancePanelViewModel(get(), get(), get()) }
-    factory { StatementViewModel(get(), get(), get(), get()) }
+    factory { StatementViewModel(get(), get(), get(), get(), get()) }
     factory { BudgetViewModel(get(), get(), get()) }
-    factory { ReportsViewModel(get(), get(), get(), get(), get(), get()) }
+    factory { ReportsViewModel(get(), get(), get(), get(), get(), get(), get()) }
+    factory { ProjectViewModel(get(), get()) }
     factory { CashFlowViewModel(get(), get(), get()) }
     factory { OfxImportViewModel(get(), get(), get(), get(), get(), get(), get()) }
     factory { ClientsViewModel(get(), get()) }

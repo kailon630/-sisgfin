@@ -22,6 +22,8 @@ import br.com.sisgfin.*
 import br.com.sisgfin.core.ui.panel.BaseCrudPanel
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.MoneyFormatter
+import br.com.sisgfin.financial.money.centsToMoney
+import br.com.sisgfin.financial.money.toCentsStr
 import br.com.sisgfin.financial.money.toMoney
 import br.com.sisgfin.financial.transactions.Transaction
 import br.com.sisgfin.financial.transactions.TransactionType
@@ -204,7 +206,7 @@ fun ContractDetailsPanel(
     var description  by remember(contract.id) { mutableStateOf(contract.description) }
     var contractorId by remember(contract.id) { mutableStateOf(contract.contractorId) }
     var type         by remember(contract.id) { mutableStateOf(contract.type) }
-    var totalValue   by remember(contract.id) { mutableStateOf(contract.totalValue.toString()) }
+    var totalValue   by remember(contract.id) { mutableStateOf(contract.totalValue.toCentsStr()) }
     var startDate    by remember(contract.id) { mutableStateOf(contract.startDate.format(dateFmt)) }
     var endDate      by remember(contract.id) { mutableStateOf(contract.endDate?.format(dateFmt) ?: "") }
     var notes        by remember(contract.id) { mutableStateOf(contract.notes ?: "") }
@@ -230,7 +232,7 @@ fun ContractDetailsPanel(
                         description  = description,
                         contractorId = contractorId,
                         type         = type,
-                        totalValue   = totalValue.toMoney(),
+                        totalValue   = totalValue.centsToMoney(),
                         startDate    = parseDate(startDate),
                         endDate      = endDate.takeIf { it.isNotBlank() }?.let { parseDate(it) },
                         notes        = notes.ifBlank { null }
@@ -314,13 +316,13 @@ fun ContractDetailsPanel(
                 onSelect   = { contractorId = it ?: 0 },
                 enabled    = canEdit
             )
-            WsTextField("VALOR TOTAL (R$)", totalValue, enabled = canEdit) { totalValue = it }
+            WsMoneyField("VALOR TOTAL (R$)", totalValue, enabled = canEdit) { totalValue = it }
         }
 
         // Vigência
         DetailSection("Vigência") {
-            WsTextField("DATA DE INÍCIO  (dd/MM/yyyy)", startDate, enabled = canEdit) { startDate = it }
-            WsTextField("DATA DE ENCERRAMENTO  (opcional, dd/MM/yyyy)", endDate, enabled = canEdit) { endDate = it }
+            WsDateField("DATA DE INÍCIO", startDate, enabled = canEdit) { startDate = it }
+            WsDateField("DATA DE ENCERRAMENTO (opcional)", endDate, enabled = canEdit) { endDate = it }
         }
 
         // Observações
@@ -467,6 +469,10 @@ private fun TableHeader(text: String, modifier: Modifier = Modifier) {
 
 private val panelDateFmt = DateTimeFormatter.ofPattern("dd/MM/yyyy")
 
-private fun parseDate(s: String): LocalDateTime = runCatching {
-    java.time.LocalDate.parse(s, panelDateFmt).atStartOfDay()
-}.getOrDefault(LocalDateTime.now())
+private fun parseDate(s: String): LocalDateTime {
+    val digits = s.trim().filter { it.isDigit() }
+    if (digits.length == 8) {
+        runCatching { return java.time.LocalDate.parse(digits, java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy")).atStartOfDay() }.getOrNull()?.let { return it }
+    }
+    return runCatching { java.time.LocalDate.parse(s.trim(), panelDateFmt).atStartOfDay() }.getOrDefault(LocalDateTime.now())
+}

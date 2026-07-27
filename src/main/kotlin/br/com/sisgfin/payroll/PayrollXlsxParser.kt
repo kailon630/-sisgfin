@@ -9,27 +9,35 @@ import org.apache.poi.ss.usermodel.WorkbookFactory
 import java.io.File
 
 // Parser para o formato SCI Ambiente Contábil ÚNICO (XLSX).
-// Lê blocos de funcionário detectados pela presença de matrícula (col A inteira) + nome (col E).
+// Suporta dois relatórios: Folha Mensal e Adiantamento Salarial.
 // Não faz lookup de BD — apenas extrai os dados brutos da planilha.
 class PayrollXlsxParser {
 
     data class ParseResult(
         val entries: List<PayrollRawEntry>,
-        val warnings: List<String>
+        val warnings: List<String>,
+        val format: Format = Format.FOLHA_MENSAL
     )
+
+    enum class Format { FOLHA_MENSAL, ADIANTAMENTO }
 
     fun parse(file: File): ParseResult {
         val allWarnings = mutableListOf<String>()
         val entries = mutableListOf<PayrollRawEntry>()
+        var detectedFormat = Format.FOLHA_MENSAL
 
         WorkbookFactory.create(file).use { workbook ->
             val sheet = workbook.getSheetAt(0)
+            detectedFormat = detectFormat(sheet)
             val lastRow = sheet.lastRowNum
             var i = 0
             while (i <= lastRow) {
                 val row = sheet.getRow(i)
-                if (row != null && isEmployeeStart(row)) {
-                    val (entry, consumed, warnings) = parseBlock(sheet, i, lastRow)
+                if (row != null && isEmployeeStart(row, detectedFormat)) {
+                    val (entry, consumed, warnings) = when (detectedFormat) {
+                        Format.FOLHA_MENSAL -> parseBlockFolha(sheet, i, lastRow)
+                        Format.ADIANTAMENTO -> parseBlockAdiantamento(sheet, i, lastRow)
+                    }
                     entries.add(entry)
                     allWarnings.addAll(warnings)
                     i += consumed
@@ -39,16 +47,31 @@ class PayrollXlsxParser {
             }
         }
 
-        return ParseResult(entries, allWarnings)
+        return ParseResult(entries, allWarnings, detectedFormat)
     }
 
-    private data class BlockResult(
-        val entry: PayrollRawEntry,
-        val rowsConsumed: Int,
-        val warnings: List<String>
-    )
+    // Detecta o formato pela célula A1: título contendo "adiantamento" → Adiantamento Salarial
+    private fun detectFormat(sheet: Sheet): Format {
+        val title = sheet.getRow(0)?.getCell(0).safeString().lowercase()
+        return if ("adiantamento" in title) Format.ADIANTAMENTO else Format.FOLHA_MENSAL
+    }
 
-    private fun parseBlock(sheet: Sheet, startRow: Int, lastRow: Int): BlockResult {
+    private fun isEmployeeStart(row: Row, format: Format): Boolean = when (format) {
+        Format.FOLHA_MENSAL -> {
+            val aVal = row.getCell(COL_A).safeString()
+            val eVal = row.getCell(COL_E).safeString()
+            aVal.toIntOrNull() != null && eVal.isNotBlank() && !eVal.startsWith("CPF")
+        }
+        Format.ADIANTAMENTO -> {
+            val aVal = row.getCell(COL_A).safeString()
+            val cVal = row.getCell(ADIANT_C).safeString()
+            aVal.toIntOrNull() != null && cVal.isNotBlank() && !cVal.startsWith("CPF")
+        }
+    }
+
+    // ── Folha Mensal ──────────────────────────────────────────────────────────
+
+    private fun parseBlockFolha(sheet: Sheet, startRow: Int, lastRow: Int): BlockResult {
         val headerRow = sheet.getRow(startRow)!!
         val matricula = headerRow.getCell(COL_A).safeString().toIntOrNull() ?: 0
         val nome = headerRow.getCell(COL_E).safeString()
@@ -56,8 +79,7 @@ class PayrollXlsxParser {
 
         var cpf = ""
         var funcao = ""
-        val cpfRow = sheet.getRow(startRow + 1)
-        if (cpfRow != null) {
+        sheet.getRow(startRow + 1)?.let { cpfRow ->
             val cpfText = cpfRow.getCell(COL_E).safeString()
             cpf = parseCpf(cpfText)
             funcao = parseFuncao(cpfText)
@@ -66,42 +88,34 @@ class PayrollXlsxParser {
         var adiantamento = Money.ZERO
         var liquido = Money.ZERO
         var liquidoCount = 0
-        val warnings = mutableListOf<String>()
-        // Conta as duas linhas fixas do cabeçalho do bloco (header + CPF)
         var rowsConsumed = 2
+        val warnings = mutableListOf<String>()
 
         for (j in (startRow + 2)..lastRow) {
             val row = sheet.getRow(j)
-            // Próximo bloco de funcionário encontrado: encerra este bloco sem contar a linha
-            if (row != null && isEmployeeStart(row)) break
+            if (row != null && isEmployeeStart(row, Format.FOLHA_MENSAL)) break
             rowsConsumed++
             if (row == null) continue
 
-            // Desconto código 903 = adiantamento já pago na 1ª parcela
-            val ahVal = row.getCell(COL_AH).safeString()
-            if (ahVal == "903") {
-                val v = row.getCell(COL_BH).safeDouble()
-                if (v != null) adiantamento = Money.fromDouble(v)
+            if (row.getCell(COL_AH).safeString() == "903") {
+                row.getCell(COL_BH).safeDouble()?.let { adiantamento = Money.fromDouble(it) }
             }
 
-            // "Líquido - >" = valor da 2ª parcela ainda a pagar
             val atVal = row.getCell(COL_AT).safeString()
             if (atVal.contains("Líquido") || atVal.contains("Liquido")) {
-                val v = row.getCell(COL_BH).safeDouble()
-                if (v != null) {
-                    if (liquidoCount == 0) {
-                        liquido = Money.fromDouble(v)
+                row.getCell(COL_BH).safeDouble()?.let { v ->
+                    liquido = if (liquidoCount == 0) {
+                        Money.fromDouble(v)
                     } else {
-                        // Segundo Líquido ocorre em folhas de férias com blocos separados
-                        liquido = liquido + Money.fromDouble(v)
-                        warnings.add("Funcionário $nome: férias detectadas — valores unificados (líquido = R\$ $liquido)")
+                        val combined = liquido + Money.fromDouble(v)
+                        warnings.add("Funcionário $nome: férias detectadas — valores unificados (líquido = R\$ $combined)")
+                        combined
                     }
                     liquidoCount++
                 }
             }
         }
 
-        // Adiantamento anômalo: valor > salário base × 3 indica erro de leitura da planilha
         if (salaryBase.isPositive() && adiantamento > salaryBase * 3.0) {
             warnings.add(
                 "Funcionário $nome (matrícula $matricula): adiantamento R\$ $adiantamento " +
@@ -116,17 +130,63 @@ class PayrollXlsxParser {
 
         return BlockResult(
             PayrollRawEntry(matricula, nome, cpf, funcao, adiantamento, liquido, salaryBase, liquidoCount),
-            rowsConsumed,
-            warnings
+            rowsConsumed, warnings
         )
     }
 
-    // Linha de início de bloco: col A tem inteiro (matrícula) E col E tem nome (não CPF)
-    private fun isEmployeeStart(row: Row): Boolean {
-        val aVal = row.getCell(COL_A).safeString()
-        val eVal = row.getCell(COL_E).safeString()
-        return aVal.toIntOrNull() != null && eVal.isNotBlank() && !eVal.startsWith("CPF")
+    // ── Adiantamento Salarial ─────────────────────────────────────────────────
+    // Neste relatório: nome em C, dados em X, líquido (= valor do adiantamento) em AQ→AZ.
+    // O campo `liquido` do PayrollRawEntry fica zero — será preenchido pela Folha Mensal.
+
+    private fun parseBlockAdiantamento(sheet: Sheet, startRow: Int, lastRow: Int): BlockResult {
+        val headerRow = sheet.getRow(startRow)!!
+        val matricula = headerRow.getCell(COL_A).safeString().toIntOrNull() ?: 0
+        val nome = headerRow.getCell(ADIANT_C).safeString()
+        val salaryBase = parseSalaryBase(headerRow.getCell(ADIANT_X).safeString())
+
+        var cpf = ""
+        var funcao = ""
+        sheet.getRow(startRow + 1)?.let { cpfRow ->
+            val cpfText = cpfRow.getCell(ADIANT_C).safeString()
+            cpf = parseCpf(cpfText)
+            funcao = parseFuncao(cpfText)
+        }
+
+        var adiantamento = Money.ZERO
+        var rowsConsumed = 2
+        val warnings = mutableListOf<String>()
+
+        for (j in (startRow + 2)..lastRow) {
+            val row = sheet.getRow(j)
+            if (row != null && isEmployeeStart(row, Format.ADIANTAMENTO)) break
+            rowsConsumed++
+            if (row == null) continue
+
+            val aqVal = row.getCell(ADIANT_AQ).safeString()
+            if (aqVal.contains("Líquido") || aqVal.contains("Liquido")) {
+                row.getCell(ADIANT_AZ).safeDouble()?.let { adiantamento = Money.fromDouble(it) }
+            }
+        }
+
+        if (salaryBase.isPositive() && adiantamento > salaryBase * 3.0) {
+            warnings.add(
+                "Funcionário $nome (matrícula $matricula): adiantamento R\$ $adiantamento " +
+                    "é anômalo (salário base R\$ $salaryBase) — valor zerado"
+            )
+            adiantamento = Money.ZERO
+        }
+
+        if (cpf.length != 11) {
+            warnings.add("Funcionário $nome (matrícula $matricula): CPF não encontrado ou inválido na linha ${startRow + 2}")
+        }
+
+        return BlockResult(
+            PayrollRawEntry(matricula, nome, cpf, funcao, adiantamento, Money.ZERO, salaryBase, 0),
+            rowsConsumed, warnings
+        )
     }
+
+    // ── Utilitários compartilhados ────────────────────────────────────────────
 
     // "Admissão em 21/03/2025   Salário base   3.025,00   Horas mensais: 210,00"
     private fun parseSalaryBase(text: String): Money {
@@ -179,12 +239,25 @@ class PayrollXlsxParser {
         }
     }
 
+    private data class BlockResult(
+        val entry: PayrollRawEntry,
+        val rowsConsumed: Int,
+        val warnings: List<String>
+    )
+
     companion object {
-        private const val COL_A  = 0   // matrícula / código de provento
-        private const val COL_E  = 4   // nome / linha de CPF
+        // Folha Mensal
+        private const val COL_A  = 0   // matrícula
+        private const val COL_E  = 4   // nome / linha CPF
         private const val COL_AB = 27  // "Admissão em... Salário base X.XXX,XX"
-        private const val COL_AH = 33  // código de desconto (ex: "903" = adiantamento)
+        private const val COL_AH = 33  // código de desconto (903 = adiantamento)
         private const val COL_AT = 45  // "Líquido - >"
         private const val COL_BH = 59  // valores monetários
+
+        // Adiantamento Salarial (7 colunas mais estreito)
+        private const val ADIANT_C  = 2   // nome / linha CPF
+        private const val ADIANT_X  = 23  // "Admissão em... Salário base X.XXX,XX"
+        private const val ADIANT_AQ = 42  // "Líquido - >" (= valor do adiantamento líquido)
+        private const val ADIANT_AZ = 51  // valor monetário
     }
 }

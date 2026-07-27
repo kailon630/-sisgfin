@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.sp
 import br.com.sisgfin.WsFilterChip
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.MoneyFormatter
+import br.com.sisgfin.financial.money.centsToMoney
+import br.com.sisgfin.financial.money.toCentsStr
 import br.com.sisgfin.financial.money.toMoney
 import br.com.sisgfin.accounts.FinancialAccountViewModel
 import br.com.sisgfin.core.ui.notifications.CrudEventEffects
@@ -152,7 +154,7 @@ fun FinancialAccountDetailsPanel(viewModel: FinancialAccountViewModel, onClose: 
     var agency by remember(item.id) { mutableStateOf(item.agency ?: "") }
     var accountNumber by remember(item.id) { mutableStateOf(item.accountNumber ?: "") }
     var accountType by remember(item.id) { mutableStateOf(item.accountType) }
-    var initialBalance by remember(item.id) { mutableStateOf(item.initialBalance.toString()) }
+    var initialBalance by remember(item.id) { mutableStateOf(item.initialBalance.toCentsStr()) }
     var investmentBroker by remember(item.id) { mutableStateOf(item.investmentBroker ?: "") }
 
     BaseCrudPanel(
@@ -169,7 +171,7 @@ fun FinancialAccountDetailsPanel(viewModel: FinancialAccountViewModel, onClose: 
                     agency = agency.ifBlank { null },
                     accountNumber = accountNumber.ifBlank { null },
                     accountType = accountType,
-                    initialBalance = initialBalance.toMoney(),
+                    initialBalance = initialBalance.centsToMoney(),
                     investmentBroker = investmentBroker.ifBlank { null }
                 )
             )
@@ -202,7 +204,7 @@ fun FinancialAccountDetailsPanel(viewModel: FinancialAccountViewModel, onClose: 
             }
         }
         DetailSection("Configuração Inicial") {
-            WsTextField("SALDO DE ABERTURA (R$)", initialBalance) { initialBalance = it }
+            WsMoneyField("SALDO DE ABERTURA (R$)", initialBalance) { initialBalance = it }
         }
         if (item.id != 0) {
             TextButton(

@@ -1,11 +1,15 @@
 package br.com.sisgfin.recurrence
 
+import br.com.sisgfin.CostCenter
+import br.com.sisgfin.CostCenterRepository
 import br.com.sisgfin.FinancialAccount
 import br.com.sisgfin.FinancialAccountRepository
 import br.com.sisgfin.Supplier
 import br.com.sisgfin.SupplierRepository
 import br.com.sisgfin.financial.categories.ExpenseCategory
 import br.com.sisgfin.financial.categories.ExpenseCategoryRepository
+import br.com.sisgfin.financial.projects.Project
+import br.com.sisgfin.financial.projects.ProjectRepository
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.transactions.Transaction
 import br.com.sisgfin.financial.transactions.TransactionType
@@ -32,7 +36,9 @@ class RecurringViewModel(
     private val service: RecurrenceTemplateService,
     private val accountRepository: FinancialAccountRepository,
     private val supplierRepository: SupplierRepository,
-    private val categoryRepository: ExpenseCategoryRepository
+    private val categoryRepository: ExpenseCategoryRepository,
+    private val costCenterRepository: CostCenterRepository,
+    private val projectRepository: ProjectRepository
 ) : BaseViewModel() {
 
     private val _uiState = MutableStateFlow(RecurringUiState())
@@ -46,6 +52,12 @@ class RecurringViewModel(
 
     private val _categories = MutableStateFlow<List<ExpenseCategory>>(emptyList())
     val categories: StateFlow<List<ExpenseCategory>> = _categories.asStateFlow()
+
+    private val _costCenters = MutableStateFlow<List<CostCenter>>(emptyList())
+    val costCenters: StateFlow<List<CostCenter>> = _costCenters.asStateFlow()
+
+    private val _projects = MutableStateFlow<List<Project>>(emptyList())
+    val projects: StateFlow<List<Project>> = _projects.asStateFlow()
 
     init {
         load()
@@ -150,9 +162,11 @@ class RecurringViewModel(
     private fun loadReferenceData() {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                _accounts.value   = accountRepository.findAll().filter { it.isActive }
-                _suppliers.value  = supplierRepository.findAll().filter { it.isActive }
-                _categories.value = categoryRepository.findAll().filter { it.isActive }
+                _accounts.value     = accountRepository.findAll().filter { it.isActive }
+                _suppliers.value    = supplierRepository.findAll().filter { it.isActive }
+                _categories.value   = categoryRepository.findAll().filter { it.isActive }
+                _costCenters.value  = costCenterRepository.findAll().filter { it.isActive }
+                _projects.value     = projectRepository.findAllActive()
             }
         }
     }

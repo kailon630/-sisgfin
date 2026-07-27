@@ -13,16 +13,25 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.ui.draganddrop.awtTransferable
 import androidx.compose.ui.text.font.FontWeight
+import java.awt.datatransfer.DataFlavor
+import java.io.File
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import br.com.sisgfin.*
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.MoneyFormatter
+import br.com.sisgfin.financial.money.centsToMoney
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -171,6 +180,7 @@ private fun WizardStepIndicator(step: PayrollImportStep) {
 
 // ── Etapa 1: Configurar ───────────────────────────────────────────────────────
 
+@OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun SelectFileStep(
     uiState: PayrollImportUiState,
@@ -180,6 +190,28 @@ private fun SelectFileStep(
         mutableStateOf(uiState.referenceMonth.let {
             "${it.monthValue.toString().padStart(2, '0')}/${it.year}"
         })
+    }
+    val isDragOverState = remember { mutableStateOf(false) }
+    val isDragOver by isDragOverState
+    val dragTarget = remember {
+        object : DragAndDropTarget {
+            override fun onStarted(event: DragAndDropEvent) { isDragOverState.value = true }
+            override fun onExited(event: DragAndDropEvent)  { isDragOverState.value = false }
+            override fun onEnded(event: DragAndDropEvent)   { isDragOverState.value = false }
+            override fun onDrop(event: DragAndDropEvent): Boolean {
+                isDragOverState.value = false
+                runCatching {
+                    val transferable = event.awtTransferable
+                    if (transferable.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+                        @Suppress("UNCHECKED_CAST")
+                        val files = transferable.getTransferData(DataFlavor.javaFileListFlavor) as? List<File>
+                        files?.firstOrNull { it.extension.equals("xlsx", ignoreCase = true) }
+                            ?.let { viewModel.loadFile(it) }
+                    }
+                }
+                return true
+            }
+        }
     }
 
     val accountOptions  = remember(uiState.accounts)    { uiState.accounts.map  { it.id to it.name } }
@@ -242,12 +274,21 @@ private fun SelectFileStep(
             // Seleção de arquivo
             Text("Arquivo XLSX", style = MaterialTheme.typography.titleSmall)
 
+            val fileBorderColor = when {
+                isDragOver              -> WsAccent
+                uiState.selectedFile != null -> WsSuccess.copy(alpha = 0.4f)
+                else                    -> WsBorder
+            }
             Surface(
-                color  = WsElevated,
+                color  = if (isDragOver) WsAccent.copy(alpha = 0.05f) else WsElevated,
                 shape  = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, if (uiState.selectedFile != null) WsSuccess.copy(alpha = 0.4f) else WsBorder, RoundedCornerShape(8.dp))
+                    .border(if (isDragOver) 2.dp else 1.dp, fileBorderColor, RoundedCornerShape(8.dp))
+                    .dragAndDropTarget(
+                        shouldStartDragAndDrop = { true },
+                        target = dragTarget
+                    )
             ) {
                 Row(
                     modifier = Modifier.padding(16.dp),
@@ -255,18 +296,33 @@ private fun SelectFileStep(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        if (uiState.selectedFile != null) Icons.Default.CheckCircle else Icons.Outlined.UploadFile,
+                        when {
+                            isDragOver -> Icons.Default.FileDownload
+                            uiState.selectedFile != null -> Icons.Default.CheckCircle
+                            else -> Icons.Outlined.UploadFile
+                        },
                         contentDescription = null,
-                        tint   = if (uiState.selectedFile != null) WsSuccess else WsTextSecondary,
+                        tint = when {
+                            isDragOver -> WsAccent
+                            uiState.selectedFile != null -> WsSuccess
+                            else -> WsTextSecondary
+                        },
                         modifier = Modifier.size(24.dp)
                     )
                     Column(modifier = Modifier.weight(1f)) {
-                        if (uiState.selectedFile != null) {
-                            Text(uiState.selectedFile.name, style = MaterialTheme.typography.bodyMedium, color = WsTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(uiState.selectedFile.parent ?: "", style = MaterialTheme.typography.labelSmall, color = WsTextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        } else {
-                            Text("Nenhum arquivo selecionado", style = MaterialTheme.typography.bodyMedium, color = WsTextSecondary)
-                            Text("Formato: *.xlsx — SCI Ambiente Contábil ÚNICO", style = MaterialTheme.typography.labelSmall, color = WsTextDisabled)
+                        when {
+                            isDragOver -> {
+                                Text("Solte o arquivo .xlsx aqui", style = MaterialTheme.typography.bodyMedium, color = WsAccent)
+                                Text("Formato: *.xlsx — SCI Ambiente Contábil ÚNICO", style = MaterialTheme.typography.labelSmall, color = WsAccent.copy(alpha = 0.7f))
+                            }
+                            uiState.selectedFile != null -> {
+                                Text(uiState.selectedFile.name, style = MaterialTheme.typography.bodyMedium, color = WsTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(uiState.selectedFile.parent ?: "", style = MaterialTheme.typography.labelSmall, color = WsTextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            else -> {
+                                Text("Arraste o arquivo aqui ou selecione pelo botão", style = MaterialTheme.typography.bodyMedium, color = WsTextSecondary)
+                                Text("Formato: *.xlsx — SCI Ambiente Contábil ÚNICO", style = MaterialTheme.typography.labelSmall, color = WsTextDisabled)
+                            }
                         }
                     }
                     WsButton(
@@ -817,7 +873,7 @@ private fun RegisterMissingEmployeeDialog(
                     enabled = false
                 )
                 WsTextField("CARGO / FUNÇÃO", role) { role = it }
-                WsTextField("SALÁRIO BASE (R$)", salaryInput) { salaryInput = it }
+                WsMoneyField("SALÁRIO BASE", salaryInput) { salaryInput = it }
                 WsSelectField(
                     label       = "TIPO DE VÍNCULO",
                     options     = empTypeOptions,
@@ -839,7 +895,7 @@ private fun RegisterMissingEmployeeDialog(
                 icon    = Icons.Default.Check,
                 enabled = name.isNotBlank() && role.isNotBlank(),
                 onClick = {
-                    val salary  = Money.fromString(salaryInput.replace(",", "."))
+                    val salary  = salaryInput.centsToMoney()
                     val empType = selectedEmpIdx?.let { EmploymentType.entries[it] }
                     onSave(name, entry.cpf, role, salary, empType)
                 }

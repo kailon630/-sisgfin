@@ -49,6 +49,33 @@ class PayrollXlsxParserTest {
         assertEquals(0, BigDecimal("4476.47").compareTo(entry.liquido.value), "Líquido de Fernanda")
     }
 
+    @Test
+    fun `arquivo real adiantamento 07-2026 parseia funcionarios corretamente`() {
+        val file = File("docs/Espelho e resumo da folha (1).xlsx")
+        if (!file.exists()) return
+
+        val result = parser.parse(file)
+        assertEquals(PayrollXlsxParser.Format.ADIANTAMENTO, result.format, "Formato detectado deve ser ADIANTAMENTO")
+        assertTrue(result.entries.isNotEmpty(), "Deve parsear ao menos um funcionário")
+        assertTrue(result.entries.all { it.adiantamento.isPositive() }, "Todos devem ter adiantamento > 0")
+        assertTrue(result.entries.all { it.liquido.isZero() }, "Liquido deve ser zero no relatório de adiantamento")
+        assertTrue(result.entries.all { it.cpf.length == 11 }, "CPFs devem estar normalizados com 11 dígitos")
+    }
+
+    @Test
+    fun `adiantamento - alex costa safra - valor correto`() {
+        val file = File("docs/Espelho e resumo da folha (1).xlsx")
+        if (!file.exists()) return
+
+        val result = parser.parse(file)
+        val entry = result.entries.firstOrNull { it.nome.contains("ALEX COSTA") }
+            ?: error("Alex Costa Safra não encontrado")
+
+        assertEquals("42262292825", entry.cpf)
+        assertEquals(0, java.math.BigDecimal("1210.00").compareTo(entry.adiantamento.value), "Adiantamento de Alex")
+        assertTrue(entry.liquido.isZero(), "Líquido deve ser zero no relatório de adiantamento")
+    }
+
     // ── 2. Edge cases (XLSX sintético em memória) ────────────────────────────
 
     @Test

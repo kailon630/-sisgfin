@@ -40,5 +40,6 @@ data class Transaction(
     val recurrenceTemplateId: Int? = null,
     val contractId: Int? = null,
     val interestAmount: Money? = null,
-    val fineAmount: Money? = null
+    val fineAmount: Money? = null,
+    val projectId: Int? = null
 ) : Identifiable, Activatable

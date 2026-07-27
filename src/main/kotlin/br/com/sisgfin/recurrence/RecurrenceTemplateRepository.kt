@@ -44,6 +44,7 @@ class RecurrenceTemplateRepository {
             it[endsAt]       = template.endsAt
             it[isActive]     = template.isActive
             it[contractId]   = template.contractId
+            it[projectId]    = template.projectId
             it[createdBy]    = template.createdBy
             it[createdAt]    = template.createdAt
             it[updatedAt]    = template.updatedAt
@@ -68,6 +69,7 @@ class RecurrenceTemplateRepository {
                 it[endsAt]       = template.endsAt
                 it[isActive]     = template.isActive
                 it[contractId]   = template.contractId
+                it[projectId]    = template.projectId
                 it[updatedAt]    = LocalDateTime.now()
             }
         }
@@ -99,6 +101,7 @@ class RecurrenceTemplateRepository {
         endsAt       = row[RecurrenceTemplatesTable.endsAt],
         isActive     = row[RecurrenceTemplatesTable.isActive],
         contractId   = row[RecurrenceTemplatesTable.contractId],
+        projectId    = row[RecurrenceTemplatesTable.projectId],
         createdBy    = row[RecurrenceTemplatesTable.createdBy],
         createdAt    = row[RecurrenceTemplatesTable.createdAt],
         updatedAt    = row[RecurrenceTemplatesTable.updatedAt]

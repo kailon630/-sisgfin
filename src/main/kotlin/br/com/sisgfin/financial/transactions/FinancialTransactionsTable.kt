@@ -35,6 +35,7 @@ object FinancialTransactionsTable : Table("financial_transactions") {
     val contractId           = integer("contract_id").nullable()
     val interestAmount       = decimal("interest_amount", 19, 2).nullable()
     val fineAmount           = decimal("fine_amount", 19, 2).nullable()
+    val projectId            = integer("financial_project_id").nullable()
 
     override val primaryKey = PrimaryKey(id)
 }

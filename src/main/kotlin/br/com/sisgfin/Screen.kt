@@ -11,6 +11,7 @@ sealed class Screen {
     object UserManagement : Screen()
     object Suppliers : Screen()
     object CostCenters : Screen()
+    object Projects : Screen()
     object Categories : Screen()
     object Budget : Screen()
     object Reports : Screen()

@@ -193,6 +193,13 @@ fun Sidebar(
             ) { onNavigate(Screen.CostCenters) }
 
             SidebarItem(
+                icon     = Icons.Outlined.FolderSpecial,
+                label    = "Projetos",
+                selected = currentScreen is Screen.Projects,
+                expanded = isExpanded
+            ) { onNavigate(Screen.Projects) }
+
+            SidebarItem(
                 icon     = Icons.Outlined.Category,
                 label    = "Plano de Contas",
                 selected = currentScreen is Screen.Categories,

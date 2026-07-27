@@ -22,6 +22,7 @@ data class RecurrenceTemplate(
     val endsAt: LocalDateTime? = null,
     val isActive: Boolean = true,
     val contractId: Int? = null,
+    val projectId: Int? = null,
     val createdBy: Int? = null,
     val createdAt: LocalDateTime = LocalDateTime.now(),
     val updatedAt: LocalDateTime = LocalDateTime.now()

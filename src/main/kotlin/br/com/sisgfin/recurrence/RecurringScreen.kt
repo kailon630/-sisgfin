@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.sp
 import br.com.sisgfin.*
 import br.com.sisgfin.core.ui.panel.BaseCrudPanel
 import br.com.sisgfin.financial.money.MoneyFormatter
+import br.com.sisgfin.financial.money.centsToMoney
+import br.com.sisgfin.financial.money.toCentsStr
 import br.com.sisgfin.financial.transactions.TransactionStatus
 import br.com.sisgfin.financial.transactions.TransactionType
 import java.time.LocalDate
@@ -243,20 +245,24 @@ private fun RecurringRow(
 
 @Composable
 fun RecurringDetailsPanel(viewModel: RecurringViewModel, onClose: () -> Unit) {
-    val uiState   by viewModel.uiState.collectAsState()
-    val accounts  by viewModel.accounts.collectAsState()
-    val suppliers by viewModel.suppliers.collectAsState()
-    val categories by viewModel.categories.collectAsState()
+    val uiState      by viewModel.uiState.collectAsState()
+    val accounts     by viewModel.accounts.collectAsState()
+    val suppliers    by viewModel.suppliers.collectAsState()
+    val categories   by viewModel.categories.collectAsState()
+    val costCenters  by viewModel.costCenters.collectAsState()
+    val projects     by viewModel.projects.collectAsState()
     val template  = uiState.selectedTemplate ?: return
     val isNew     = template.id == 0
 
     var description  by remember(template.id) { mutableStateOf(template.description) }
-    var amountStr    by remember(template.id) { mutableStateOf(template.amount.value.toPlainString()) }
+    var amountStr    by remember(template.id) { mutableStateOf(template.amount.toCentsStr()) }
     var type         by remember(template.id) { mutableStateOf(template.type) }
     var interval     by remember(template.id) { mutableStateOf(template.interval) }
     var dayOfMonth   by remember(template.id) { mutableStateOf(template.dayOfMonth.toString()) }
     var accountId    by remember(template.id) { mutableStateOf(template.accountId) }
     var supplierId   by remember(template.id) { mutableStateOf(template.supplierId) }
+    var costCenterId by remember(template.id) { mutableStateOf(template.costCenterId) }
+    var projectId    by remember(template.id) { mutableStateOf(template.projectId) }
     var categoryId   by remember(template.id) { mutableStateOf(template.categoryId) }
     var documentType by remember(template.id) { mutableStateOf(template.documentType ?: "") }
     var notes        by remember(template.id) { mutableStateOf(template.notes ?: "") }
@@ -277,17 +283,18 @@ fun RecurringDetailsPanel(viewModel: RecurringViewModel, onClose: () -> Unit) {
         errorMessage = uiState.errorMessage,
         onSave = {
             val day  = dayOfMonth.toIntOrNull()?.coerceIn(1, 31) ?: template.dayOfMonth
-            val amt  = amountStr.replace(",", ".").toBigDecimalOrNull()
-                ?: template.amount.value
+            val amt  = amountStr.centsToMoney()
             viewModel.save(
                 template.copy(
                     description  = description,
-                    amount       = br.com.sisgfin.financial.money.Money(amt),
+                    amount       = amt,
                     type         = type,
                     interval     = interval,
                     dayOfMonth   = day,
                     accountId    = accountId.takeIf { it > 0 } ?: template.accountId,
                     supplierId   = supplierId,
+                    costCenterId = costCenterId,
+                    projectId    = projectId,
                     categoryId   = categoryId,
                     documentType = documentType.ifBlank { null },
                     notes        = notes.ifBlank { null },
@@ -301,7 +308,7 @@ fun RecurringDetailsPanel(viewModel: RecurringViewModel, onClose: () -> Unit) {
             WsTextField("DESCRIÇÃO", description) { description = it }
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                WsTextField("VALOR (R$)", amountStr, modifier = Modifier.weight(1f)) { amountStr = it }
+                WsMoneyField("VALOR (R$)", amountStr, modifier = Modifier.weight(1f)) { amountStr = it }
                 WsTextField("DIA DO MÊS", dayOfMonth, modifier = Modifier.weight(1f)) { dayOfMonth = it }
             }
 
@@ -333,8 +340,8 @@ fun RecurringDetailsPanel(viewModel: RecurringViewModel, onClose: () -> Unit) {
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                WsTextField("INÍCIO (DD/MM/AAAA)", startsAt, modifier = Modifier.weight(1f)) { startsAt = it }
-                WsTextField("ENCERRAMENTO (opcional)", endsAt, modifier = Modifier.weight(1f)) { endsAt = it }
+                WsDateField("INÍCIO", startsAt, modifier = Modifier.weight(1f)) { startsAt = it }
+                WsDateField("ENCERRAMENTO (opcional)", endsAt, modifier = Modifier.weight(1f)) { endsAt = it }
             }
         }
 
@@ -356,6 +363,22 @@ fun RecurringDetailsPanel(viewModel: RecurringViewModel, onClose: () -> Unit) {
                     options    = supplierOptions,
                     selectedId = supplierId,
                     onSelect   = { supplierId = it }
+                )
+            }
+            if (costCenters.isNotEmpty()) {
+                WsSelectField(
+                    label      = "CENTRO DE CUSTO",
+                    options    = costCenters.map { it.id to it.name },
+                    selectedId = costCenterId,
+                    onSelect   = { costCenterId = it }
+                )
+            }
+            if (projects.isNotEmpty()) {
+                WsSelectField(
+                    label      = "PROJETO",
+                    options    = projects.map { it.id to it.name },
+                    selectedId = projectId,
+                    onSelect   = { projectId = it }
                 )
             }
             if (categories.isNotEmpty()) {
@@ -481,9 +504,12 @@ fun RecurringDetailsPanel(viewModel: RecurringViewModel, onClose: () -> Unit) {
     }
 }
 
-private fun parseDate(value: String): LocalDate =
-    try {
-        LocalDate.parse(value.trim(), dateFmt)
-    } catch (_: Exception) {
-        LocalDate.now()
+private fun parseDate(value: String): LocalDate {
+    val s = value.trim()
+    val digits = s.filter { it.isDigit() }
+    if (digits.length == 8) {
+        runCatching { return LocalDate.parse(digits, DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrNull()?.let { return it }
     }
+    runCatching { return LocalDate.parse(s, dateFmt) }.getOrNull()?.let { return it }
+    return LocalDate.now()
+}

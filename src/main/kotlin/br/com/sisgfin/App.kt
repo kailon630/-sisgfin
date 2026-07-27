@@ -20,6 +20,7 @@ import br.com.sisgfin.dashboard.DashboardViewModel
 import br.com.sisgfin.employees.EmployeeViewModel
 import br.com.sisgfin.presentation.viewmodel.LoginViewModel
 import br.com.sisgfin.financial.transactions.TransactionsViewModel
+import br.com.sisgfin.financial.projects.ProjectViewModel
 import br.com.sisgfin.projects.CostCenterViewModel
 import br.com.sisgfin.suppliers.SupplierViewModel
 import br.com.sisgfin.users.UserManagementViewModel
@@ -51,6 +52,7 @@ fun App() {
     val contractViewModel: ContractViewModel = koinInject()
     val clientsViewModel: ClientsViewModel = koinInject()
     val receivablesViewModel: ReceivablesViewModel = koinInject()
+    val projectsViewModel: ProjectViewModel = koinInject()
 
     SisgFinTheme(isDark = isDarkTheme) {
         AnimatedContent(
@@ -88,6 +90,7 @@ fun App() {
                     contractViewModel = contractViewModel,
                     clientsViewModel = clientsViewModel,
                     receivablesViewModel = receivablesViewModel,
+                    projectsViewModel = projectsViewModel,
                     isDarkTheme = isDarkTheme,
                     onToggleTheme = {
                         isDarkTheme = !isDarkTheme

@@ -20,6 +20,8 @@ import br.com.sisgfin.financial.transactions.workflow.TransactionStateMachine
 import br.com.sisgfin.contracts.Contract
 import br.com.sisgfin.contracts.ContractRepository
 import br.com.sisgfin.contracts.ContractService
+import br.com.sisgfin.financial.projects.Project
+import br.com.sisgfin.financial.projects.ProjectRepository
 import br.com.sisgfin.recurrence.RecurrenceInterval
 import br.com.sisgfin.recurrence.RecurrenceTemplate
 import br.com.sisgfin.recurrence.RecurrenceTemplateService
@@ -44,7 +46,8 @@ class TransactionsViewModel(
     private val sessionManager: SessionManager,
     private val budgetRepository: BudgetItemRepository,
     private val recurrenceTemplateService: RecurrenceTemplateService? = null,
-    private val contractService: ContractService? = null
+    private val contractService: ContractService? = null,
+    private val projectRepository: ProjectRepository? = null
 ) : BaseCrudViewModel<Transaction>(
     operations = service,
     emptyFactory = {
@@ -89,6 +92,9 @@ class TransactionsViewModel(
     // Fase 7-B: contratos ativos para o seletor no painel
     private val _contracts = MutableStateFlow<List<Contract>>(emptyList())
     val contracts: StateFlow<List<Contract>> = _contracts.asStateFlow()
+
+    private val _projects = MutableStateFlow<List<Project>>(emptyList())
+    val projects: StateFlow<List<Project>> = _projects.asStateFlow()
 
     private val _contractWouldExceed = MutableStateFlow(false)
     val contractWouldExceed: StateFlow<Boolean> = _contractWouldExceed.asStateFlow()
@@ -137,6 +143,9 @@ class TransactionsViewModel(
             runCatching {
                 withContext(Dispatchers.IO) { contractService?.findActive() ?: emptyList() }
             }.onSuccess { _contracts.value = it }
+            runCatching {
+                withContext(Dispatchers.IO) { projectRepository?.findAllActive() ?: emptyList() }
+            }.onSuccess { _projects.value = it }
         }
     }
 

@@ -4,6 +4,7 @@ import br.com.sisgfin.*
 import br.com.sisgfin.cashflow.CashFlowService
 import br.com.sisgfin.employees.PayrollEngine
 import br.com.sisgfin.financial.categories.ExpenseCategoryService
+import br.com.sisgfin.financial.projects.ProjectService
 import br.com.sisgfin.budget.BudgetItemService
 import br.com.sisgfin.ofx.OfxImportService
 import br.com.sisgfin.ofx.OfxParser
@@ -73,6 +74,13 @@ val serviceModule = module {
             get(), // RecurrenceTemplateRepository
             get(), // TransactionRepository
             get(), // RecurrenceEngine
+            get()  // SessionManager
+        )
+    }
+    single {
+        ProjectService(
+            get(), // ProjectRepository
+            get(), // AuditRepository
             get()  // SessionManager
         )
     }

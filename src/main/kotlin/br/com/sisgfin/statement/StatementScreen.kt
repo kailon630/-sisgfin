@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import br.com.sisgfin.*
 import br.com.sisgfin.financial.money.MoneyFormatter
+import br.com.sisgfin.financial.projects.Project
 import br.com.sisgfin.financial.transactions.TransactionType
 import br.com.sisgfin.financial.transactions.TransactionTypeLabel
 import java.time.LocalDate
@@ -99,6 +100,7 @@ fun StatementScreen(viewModel: StatementViewModel) {
             accounts = state.accounts,
             costCenters = state.costCenters,
             categories = state.categories,
+            projects = state.projects,
             filter = state.filter,
             onFilterChange = { viewModel.applyFilter(it) }
         )
@@ -122,6 +124,7 @@ private fun StatementFilterBar(
     accounts: List<FinancialAccount>,
     costCenters: List<CostCenter>,
     categories: List<br.com.sisgfin.financial.categories.ExpenseCategory>,
+    projects: List<Project>,
     filter: StatementFilter,
     onFilterChange: (StatementFilter) -> Unit
 ) {
@@ -147,13 +150,13 @@ private fun StatementFilterBar(
                         placeholder = "Selecionar conta..."
                     )
                 }
-                WsTextField(
-                    "DE (DD/MM/AAAA)",
+                WsDateField(
+                    "DE",
                     fromStr,
                     modifier = Modifier.weight(1f)
                 ) { fromStr = it }
-                WsTextField(
-                    "ATÉ (DD/MM/AAAA)",
+                WsDateField(
+                    "ATÉ",
                     toStr,
                     modifier = Modifier.weight(1f)
                 ) { toStr = it }
@@ -165,7 +168,7 @@ private fun StatementFilterBar(
                         )
                     )
                 })
-                if (filter.from != null || filter.to != null || filter.type != null || filter.costCenterId != null || filter.categoryId != null) {
+                if (filter.from != null || filter.to != null || filter.type != null || filter.costCenterId != null || filter.categoryId != null || filter.projectId != null) {
                     WsIconButton(Icons.Default.Close, onClick = {
                         onFilterChange(StatementFilter(accountId = filter.accountId))
                     })
@@ -215,6 +218,17 @@ private fun StatementFilterBar(
                             options = categories.map { it.id to it.displayName },
                             selectedId = filter.categoryId,
                             onSelect = { onFilterChange(filter.copy(categoryId = it)) }
+                        )
+                    }
+                }
+                // Projeto
+                if (projects.isNotEmpty()) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        WsSelectField(
+                            label = "PROJETO",
+                            options = projects.map { it.id to it.name },
+                            selectedId = filter.projectId,
+                            onSelect = { onFilterChange(filter.copy(projectId = it)) }
                         )
                     }
                 }
@@ -375,4 +389,10 @@ private fun StatementRow(entry: StatementEntry) {
     }
 }
 
-private fun parseLocalDate(s: String): LocalDate? = runCatching { LocalDate.parse(s.trim(), dateFmt) }.getOrNull()
+private fun parseLocalDate(s: String): LocalDate? {
+    val digits = s.trim().filter { it.isDigit() }
+    if (digits.length == 8) {
+        runCatching { return LocalDate.parse(digits, java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrNull()?.let { return it }
+    }
+    return runCatching { LocalDate.parse(s.trim(), dateFmt) }.getOrNull()
+}

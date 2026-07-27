@@ -24,6 +24,8 @@ import br.com.sisgfin.core.ui.notifications.CrudEventEffects
 import br.com.sisgfin.core.ui.panel.BaseCrudPanel
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.MoneyFormatter
+import br.com.sisgfin.financial.money.centsToMoney
+import br.com.sisgfin.financial.money.toCentsStr
 import br.com.sisgfin.financial.money.toMoney
 import java.time.LocalDate
 
@@ -287,8 +289,8 @@ fun BudgetItemPanel(viewModel: BudgetViewModel, onClose: () -> Unit) {
     var costCenterId     by remember(item.id) { mutableStateOf(item.costCenterId.takeIf { it > 0 }) }
     var categoryId    by remember(item.id) { mutableStateOf(item.categoryId.takeIf { it > 0 }) }
     var year          by remember(item.id) { mutableStateOf(item.year.toString()) }
-    var monthlyStr    by remember(item.id) { mutableStateOf(if (item.monthlyAmount.isZero()) "" else item.monthlyAmount.toString()) }
-    var annualStr     by remember(item.id) { mutableStateOf(if (item.annualAmount.isZero()) "" else item.annualAmount.toString()) }
+    var monthlyStr    by remember(item.id) { mutableStateOf(item.monthlyAmount.toCentsStr()) }
+    var annualStr     by remember(item.id) { mutableStateOf(item.annualAmount.toCentsStr()) }
     var notes         by remember(item.id) { mutableStateOf(item.notes ?: "") }
     var annualManual  by remember(item.id) { mutableStateOf(false) }
 
@@ -308,8 +310,8 @@ fun BudgetItemPanel(viewModel: BudgetViewModel, onClose: () -> Unit) {
         // RN-28: onSave = null torna o painel somente leitura para projetos encerrados
         onSave = if (isEncerrado) null else {
             {
-                val monthly = monthlyStr.toMoney()
-                val annual  = if (annualStr.isBlank()) monthly * java.math.BigDecimal(12) else annualStr.toMoney()
+                val monthly = monthlyStr.centsToMoney()
+                val annual  = if (annualStr.isBlank()) monthly * java.math.BigDecimal(12) else annualStr.centsToMoney()
                 viewModel.save(
                     item.copy(
                         costCenterId  = costCenterId ?: 0,
@@ -347,16 +349,16 @@ fun BudgetItemPanel(viewModel: BudgetViewModel, onClose: () -> Unit) {
         }
 
         DetailSection("Dotação") {
-            WsTextField("DOTAÇÃO MENSAL (R$)", monthlyStr, enabled = !isEncerrado) { v ->
+            WsMoneyField("DOTAÇÃO MENSAL (R$)", monthlyStr, enabled = !isEncerrado) { v ->
                 monthlyStr = v
                 if (!annualManual) {
-                    val m = v.toBigDecimalOrNull()
-                    if (m != null) annualStr = (m * java.math.BigDecimal(12)).toPlainString()
+                    val cents = v.filter { it.isDigit() }.toLongOrNull() ?: 0L
+                    annualStr = (cents * 12).toString()
                 }
             }
-            WsTextField("DOTAÇÃO ANUAL (R$)", annualStr, enabled = !isEncerrado) { v ->
+            WsMoneyField("DOTAÇÃO ANUAL (R$)", annualStr, enabled = !isEncerrado) { v ->
                 annualStr = v
-                annualManual = v.isNotBlank()
+                annualManual = v.isNotEmpty()
             }
             if (!isEncerrado) {
                 Text(
