@@ -2,6 +2,7 @@ package br.com.sisgfin.di
 
 import br.com.sisgfin.*
 import br.com.sisgfin.cashflow.CashFlowService
+import br.com.sisgfin.financial.transactions.CounterpartyResolver
 import br.com.sisgfin.employees.PayrollEngine
 import br.com.sisgfin.financial.categories.ExpenseCategoryService
 import br.com.sisgfin.financial.projects.ProjectService
@@ -15,6 +16,7 @@ import br.com.sisgfin.recurrence.RecurrenceTemplateService
 import org.koin.dsl.module
 
 val serviceModule = module {
+    single { CounterpartyResolver(get(), get()) }
     single { SessionManager(get()) }
     single { AuthService(get(), get()) }
     single { UserManagementService(get(), get(), get()) }

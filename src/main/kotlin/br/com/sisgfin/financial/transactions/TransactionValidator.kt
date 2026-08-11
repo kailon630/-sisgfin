@@ -38,7 +38,7 @@ object TransactionValidator {
                 if (transaction.paidAmount == null || transaction.paidAmount.isZero()) {
                     errors += "Status Parcial exige valor pago."
                 }
-                if (transaction.paidAmount != null && transaction.paidAmount.compareTo(transaction.amount) >= 0) {
+                if (transaction.paidAmount != null && transaction.principalPaid.compareTo(transaction.amount) >= 0) {
                     errors += "Pagamento parcial deve ser menor que o valor total."
                 }
             }
@@ -86,16 +86,26 @@ object TransactionValidator {
     }
 
     fun validatePayment(
-        total: Money,
-        paidAmount: Money,
+        outstanding: Money,
+        principal: Money,
+        interest: Money?,
+        fine: Money?,
         paymentDate: java.time.LocalDateTime,
         issueDate: java.time.LocalDateTime
     ) {
-        if (paidAmount.isZero() || paidAmount.isNegative()) {
+        if (principal.isZero() || principal.isNegative()) {
             throw IllegalArgumentException("Valor pago deve ser maior que zero.")
         }
-        if (paidAmount.compareTo(total) > 0) {
-            throw IllegalArgumentException("Valor pago não pode exceder o valor da transação.")
+        if (principal.compareTo(outstanding) > 0) {
+            throw IllegalArgumentException(
+                "Valor excede o saldo devedor do título (R$ $outstanding restantes)."
+            )
+        }
+        if (interest != null && interest.isNegative()) {
+            throw IllegalArgumentException("Juros não pode ser negativo.")
+        }
+        if (fine != null && fine.isNegative()) {
+            throw IllegalArgumentException("Multa não pode ser negativa.")
         }
         if (paymentDate.isBefore(issueDate)) {
             throw IllegalArgumentException("Data de pagamento não pode ser anterior à data de emissão.")

@@ -10,9 +10,6 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -33,44 +30,16 @@ import androidx.compose.ui.unit.sp
 import br.com.sisgfin.*
 import br.com.sisgfin.core.ui.keyboard.KeyboardShortcuts
 import br.com.sisgfin.core.ui.notifications.CrudEventEffects
+import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.MoneyFormatter
 import br.com.sisgfin.financial.money.centsToMoney
 import br.com.sisgfin.financial.money.toCentsStr
 import br.com.sisgfin.financial.money.toMoney
-import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 private val dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
-
-// ── Agrupamento temporal (Ajuste 3) ──────────────────────────────────────────
-
-private data class TxGroup(val label: String, val badgeColor: Color, val items: List<Transaction>)
-
-@Composable
-private fun groupByTimeSection(items: List<Transaction>): List<TxGroup> {
-    val today    = LocalDate.now()
-    val tomorrow = today.plusDays(1)
-    val weekEnd  = today.with(DayOfWeek.SUNDAY)
-    val active   = setOf(TransactionStatus.PENDING, TransactionStatus.PARTIAL, TransactionStatus.SCHEDULED)
-
-    val overdue    = items.filter { it.status == TransactionStatus.OVERDUE }
-    val dueToday   = items.filter { it.status in active && it.dueDate.toLocalDate() == today }
-    val dueTomorrow = items.filter { it.status in active && it.dueDate.toLocalDate() == tomorrow }
-    val thisWeek   = items.filter {
-        it.status in active && it.dueDate.toLocalDate().let { d -> d > tomorrow && d <= weekEnd }
-    }
-    val later = items.filter { it.status in active && it.dueDate.toLocalDate() > weekEnd }
-
-    return buildList {
-        if (overdue.isNotEmpty())     add(TxGroup("Vencidos (${overdue.size})",      WsDanger,        overdue))
-        if (dueToday.isNotEmpty())    add(TxGroup("Hoje (${dueToday.size})",          WsWarning,       dueToday))
-        if (dueTomorrow.isNotEmpty()) add(TxGroup("Amanhã (${dueTomorrow.size})",     WsAccent,        dueTomorrow))
-        if (thisWeek.isNotEmpty())    add(TxGroup("Esta semana (${thisWeek.size})",   WsTextSecondary, thisWeek))
-        if (later.isNotEmpty())       add(TxGroup("Próximas (${later.size})",         WsTextSecondary, later))
-    }
-}
 
 @Composable
 fun TransactionsScreen(
@@ -216,9 +185,14 @@ fun TransactionsScreen(
             }
         )
 
+        val displayedTotal = remember(uiState.items) {
+            uiState.items.fold(Money.ZERO) { acc, tx -> acc + tx.amount }
+        }
+
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
+                .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
                 .border(1.dp, WsBorder, RoundedCornerShape(8.dp))
                 .background(WsSurface)
@@ -226,55 +200,25 @@ fun TransactionsScreen(
             if (uiState.items.isEmpty() && !uiState.isLoading) {
                 EmptyState("Nenhuma transação encontrada.")
             } else {
-                // Ajuste 3: cabeçalho fixo + corpo lazy (agrupado ou plano)
-                Column(modifier = Modifier.fillMaxSize()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().background(WsElevated).padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TableHeaderCell("TIPO", Modifier.weight(0.9f))
-                        TableHeaderCell("DESCRIÇÃO", Modifier.weight(2.2f))
-                        TableHeaderCell("VENCIMENTO", Modifier.weight(1f))
-                        TableHeaderCell("VALOR", Modifier.weight(1f), TextAlign.End)
-                        TableHeaderCell("STATUS", Modifier.weight(1f), TextAlign.Center)
+                TransactionListView(
+                    items            = uiState.items,
+                    selectedId       = uiState.selectedItem?.id,
+                    grouped          = listFilter is TransactionListFilter.ActionRequired,
+                    onRowClick       = { openPanel(it) },
+                    onRowDoubleClick = { viewModel.openDialog(it) },
+                    onContextMenu    = {
+                        contextMenuTx = it
+                        contextMenuExpanded = true
+                        viewModel.selectTransaction(it)
                     }
-                    HorizontalDivider(color = WsBorder)
-
-                    if (listFilter is TransactionListFilter.ActionRequired) {
-                        // Tabela agrupada por seção temporal
-                        GroupedTransactionTable(
-                            groups = groupByTimeSection(uiState.items),
-                            selectedId = uiState.selectedItem?.id,
-                            onSingleClick = { openPanel(it) },
-                            onDoubleClick = { viewModel.openDialog(it) },
-                            onContextMenu = {
-                                contextMenuTx = it
-                                contextMenuExpanded = true
-                                viewModel.selectTransaction(it)
-                            }
-                        )
-                    } else {
-                        // Tabela plana (filtros específicos)
-                        LazyColumn(modifier = Modifier.fillMaxSize()) {
-                            items(uiState.items, key = { it.id }) { item ->
-                                TransactionRow(
-                                    item = item,
-                                    isSelected = uiState.selectedItem?.id == item.id,
-                                    onSingleClick  = { openPanel(item) },
-                                    onDoubleClick  = { viewModel.openDialog(item) },
-                                    onContextMenu  = {
-                                        contextMenuTx = item
-                                        contextMenuExpanded = true
-                                        viewModel.selectTransaction(item)
-                                    }
-                                )
-                                HorizontalDivider(color = WsBorder.copy(alpha = 0.5f))
-                            }
-                        }
-                    }
-                }
+                )
             }
         }
+
+        TotalsFooter(
+            displayed = displayedTotal,
+            count     = uiState.items.size
+        )
 
         if (uiState.isDialogVisible) {
             TransactionQuickPopup(
@@ -323,7 +267,7 @@ fun TransactionsScreen(
 }
 
 @Composable
-private fun TransactionFilterBar(
+fun TransactionFilterBar(
     listFilter: TransactionListFilter,
     searchQuery: String,
     searchFocus: FocusRequester,
@@ -373,11 +317,11 @@ private fun TransactionFilterBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.padding(top = 8.dp)
         ) {
-            // Ajuste 1: "A pagar" como chip padrão (PENDING + OVERDUE + PARTIAL)
+            // Ajuste 1: "Em aberto" — PENDING + OVERDUE + PARTIAL de qualquer tipo (receita e despesa)
             WsFilterChip(
                 selected = listFilter is TransactionListFilter.ActionRequired,
                 onClick = { onFilter(TransactionListFilter.ActionRequired) },
-                label = { Text("A pagar") }
+                label = { Text("Em aberto") }
             )
             WsFilterChip(
                 selected = listFilter is TransactionListFilter.All,
@@ -421,65 +365,6 @@ private fun TransactionFilterBar(
     }
 }
 
-// ── Tabela agrupada (Ajuste 3) ───────────────────────────────────────────────
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun GroupedTransactionTable(
-    groups: List<TxGroup>,
-    selectedId: Int?,
-    onSingleClick: (Transaction) -> Unit,
-    onDoubleClick: (Transaction) -> Unit,
-    onContextMenu: (Transaction) -> Unit
-) {
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
-        groups.forEach { group ->
-            stickyHeader(key = "header_${group.label}") {
-                GroupHeader(group)
-            }
-            items(group.items, key = { it.id }) { item ->
-                TransactionRow(
-                    item          = item,
-                    isSelected    = selectedId == item.id,
-                    onSingleClick = { onSingleClick(item) },
-                    onDoubleClick = { onDoubleClick(item) },
-                    onContextMenu = { onContextMenu(item) }
-                )
-                HorizontalDivider(color = WsBorder.copy(alpha = 0.5f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun GroupHeader(group: TxGroup) {
-    Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(WsElevated)
-                .padding(horizontal = 16.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(7.dp)
-                    .background(group.badgeColor, CircleShape)
-            )
-            Text(
-                text  = group.label,
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontSize      = 11.sp,
-                    letterSpacing = 0.6.sp
-                ),
-                color = group.badgeColor
-            )
-        }
-        HorizontalDivider(color = WsBorder)
-    }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -487,6 +372,7 @@ private fun GroupHeader(group: TxGroup) {
 fun TransactionRow(
     item: Transaction,
     isSelected: Boolean,
+    counterpartyName: String? = null,
     onSingleClick: () -> Unit,
     onDoubleClick: () -> Unit,
     onContextMenu: () -> Unit
@@ -531,14 +417,24 @@ fun TransactionRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             TransactionTypeLabel(item.type, Modifier.weight(0.9f))
-            Text(
-                item.description,
-                modifier = Modifier.weight(2.2f),
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = if (item.status == TransactionStatus.PAID) WsTextSecondary else Color.Unspecified
-            )
+            Column(modifier = Modifier.weight(2.2f)) {
+                Text(
+                    item.description,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = if (item.status == TransactionStatus.PAID) WsTextSecondary else Color.Unspecified
+                )
+                counterpartyName?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = WsTextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     item.dueDate.format(dateFormatter),
@@ -572,7 +468,7 @@ fun TransactionRow(
 }
 
 @Composable
-private fun TransactionContextMenu(
+internal fun TransactionContextMenu(
     expanded: Boolean,
     transaction: Transaction?,
     onDismiss: () -> Unit,
@@ -580,14 +476,16 @@ private fun TransactionContextMenu(
     onPay: () -> Unit,
     onCancel: () -> Unit,
     onDuplicate: () -> Unit,
-    onDetails: () -> Unit
+    onDetails: () -> Unit,
+    canPay: Boolean = true
 ) {
     if (!expanded || transaction == null) return
     DropdownMenu(expanded = true, onDismissRequest = onDismiss, containerColor = WsElevated) {
         DropdownMenuItem(text = { Text("Abrir detalhes", color = WsTextPrimary) }, onClick = onDetails)
         DropdownMenuItem(text = { Text("Editar", color = WsTextPrimary) }, onClick = onEdit)
-        if (transaction.status != TransactionStatus.PAID && transaction.status != TransactionStatus.CANCELED) {
-            DropdownMenuItem(text = { Text("Quitar", color = WsTextPrimary) }, onClick = onPay)
+        if (canPay && transaction.status != TransactionStatus.PAID && transaction.status != TransactionStatus.CANCELED) {
+            val payLabel = if (transaction.status == TransactionStatus.PARTIAL) "Quitar saldo" else "Quitar"
+            DropdownMenuItem(text = { Text(payLabel, color = WsTextPrimary) }, onClick = onPay)
         }
         DropdownMenuItem(text = { Text("Duplicar", color = WsTextPrimary) }, onClick = onDuplicate)
         if (transaction.status != TransactionStatus.CANCELED) {

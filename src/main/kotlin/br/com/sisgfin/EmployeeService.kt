@@ -21,8 +21,10 @@ class EmployeeService(
                 payrollEngine.generateForEmployee(newId)
             else emptyList()
         } else {
+            val existing = repository.getById(employee.id)
             repository.update(employee)
-            lastPayrollResult = if (employee.effectivePaymentDays().isNotEmpty())
+            val paymentDaysChanged = existing?.effectivePaymentDays() != employee.effectivePaymentDays()
+            lastPayrollResult = if (paymentDaysChanged && employee.effectivePaymentDays().isNotEmpty())
                 payrollEngine.generateForEmployee(employee.id)
             else emptyList()
         }

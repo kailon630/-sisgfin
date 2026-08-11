@@ -70,10 +70,12 @@ class TransactionValidatorTest {
         val paymentDate = LocalDateTime.of(2026, 1, 9, 0, 0)
         val ex = assertThrows<IllegalArgumentException> {
             TransactionValidator.validatePayment(
-                total = Money.fromDouble(500.0),
-                paidAmount = Money.fromDouble(500.0),
+                outstanding = Money.fromDouble(500.0),
+                principal   = Money.fromDouble(500.0),
+                interest    = null,
+                fine        = null,
                 paymentDate = paymentDate,
-                issueDate = issueDate
+                issueDate   = issueDate
             )
         }
         assertTrue(ex.message!!.contains("anterior à data de emissão"))
@@ -84,10 +86,12 @@ class TransactionValidatorTest {
         val date = LocalDateTime.of(2026, 1, 10, 0, 0)
         assertDoesNotThrow {
             TransactionValidator.validatePayment(
-                total = Money.fromDouble(500.0),
-                paidAmount = Money.fromDouble(500.0),
+                outstanding = Money.fromDouble(500.0),
+                principal   = Money.fromDouble(500.0),
+                interest    = null,
+                fine        = null,
                 paymentDate = date,
-                issueDate = date
+                issueDate   = date
             )
         }
     }

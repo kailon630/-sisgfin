@@ -7,6 +7,7 @@ import br.com.sisgfin.core.result.Result
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.transactions.Transaction
 import br.com.sisgfin.financial.transactions.TransactionRepository
+import br.com.sisgfin.financial.transactions.TransactionService
 import br.com.sisgfin.presentation.viewmodel.BaseViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,7 +41,8 @@ data class ReceivablesUiState(
 
 class ReceivablesViewModel(
     private val transactionRepository: TransactionRepository,
-    private val supplierRepository: SupplierRepository
+    private val supplierRepository: SupplierRepository,
+    private val transactionService: TransactionService
 ) : BaseViewModel() {
 
     private val _uiState = MutableStateFlow(ReceivablesUiState(isLoading = true))
@@ -53,6 +55,7 @@ class ReceivablesViewModel(
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
             val result = withContext(Dispatchers.IO) {
                 runCatching {
+                    transactionService.syncOverdueStatuses()
                     val today = LocalDate.now()
                     val all = transactionRepository.findReceivables()
                     val supplierNames = supplierRepository.findAll().associate { it.id to it.name }

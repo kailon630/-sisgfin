@@ -54,16 +54,34 @@ class FinancialAccountService(
     withActiveFlag = { item, active -> item.copy(isActive = active) },
     isActive = { it.isActive }
 ) {
-    // RN-04 + RN-06: saldo inclui rendimentos (ADJUSTMENT) de aplicações
+    // RN-04 + RN-06 + C1: saldo com estorno dirigido por reversed_type
     fun calculateBalance(accountId: Int): Money {
         val account = accountRepository.findById(accountId) ?: return Money.ZERO
-        val income      = transactionRepository.sumPaid(accountId, TransactionType.INCOME)
-        val expense     = transactionRepository.sumPaid(accountId, TransactionType.EXPENSE)
-        val reversal    = transactionRepository.sumPaid(accountId, TransactionType.REVERSAL)
-        val adjustment  = transactionRepository.sumPaid(accountId, TransactionType.ADJUSTMENT)
-        val transferIn  = transactionRepository.sumPaidTransferIn(accountId)
-        val transferOut = transactionRepository.sumPaidTransferOut(accountId)
-        return account.initialBalance + income + reversal + adjustment + transferIn - expense - transferOut
+        val income         = transactionRepository.sumPaid(accountId, TransactionType.INCOME)
+        val expense        = transactionRepository.sumPaid(accountId, TransactionType.EXPENSE)
+        val adjustment     = transactionRepository.sumPaid(accountId, TransactionType.ADJUSTMENT)
+        val transferIn     = transactionRepository.sumPaidTransferIn(accountId)
+        val transferOut    = transactionRepository.sumPaidTransferOut(accountId)
+        val incomePartial  = transactionRepository.sumPartialPaid(accountId, TransactionType.INCOME)
+        val expensePartial = transactionRepository.sumPartialPaid(accountId, TransactionType.EXPENSE)
+        val reversalCredit = transactionRepository.sumPaidReversalOf(
+            accountId, listOf(TransactionType.EXPENSE)
+        )
+        val reversalDebit = transactionRepository.sumPaidReversalOf(
+            accountId, listOf(TransactionType.INCOME, TransactionType.ADJUSTMENT)
+        )
+        return br.com.sisgfin.financial.accounts.AccountBalanceFormula.compute(
+            initialBalance = account.initialBalance,
+            income = income,
+            incomePartial = incomePartial,
+            expense = expense,
+            expensePartial = expensePartial,
+            adjustment = adjustment,
+            transferIn = transferIn,
+            transferOut = transferOut,
+            reversalCredit = reversalCredit,
+            reversalDebit = reversalDebit
+        )
     }
 
     // RN-05: bloqueia inativação se saldo ≠ 0

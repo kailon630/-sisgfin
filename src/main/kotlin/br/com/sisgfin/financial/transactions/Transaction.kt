@@ -41,5 +41,18 @@ data class Transaction(
     val contractId: Int? = null,
     val interestAmount: Money? = null,
     val fineAmount: Money? = null,
-    val projectId: Int? = null
-) : Identifiable, Activatable
+    val projectId: Int? = null,
+    /** Tipo do original quando `type == REVERSAL`; define a direção no saldo. */
+    val reversedType: TransactionType? = null
+) : Identifiable, Activatable {
+
+    /** Principal efetivamente amortizado — exclui juros e multa acumulados. */
+    val principalPaid: Money
+        get() = (paidAmount ?: Money.ZERO) -
+                (interestAmount ?: Money.ZERO) -
+                (fineAmount ?: Money.ZERO)
+
+    /** Quanto ainda falta amortizar do valor do título. */
+    val outstandingPrincipal: Money
+        get() = amount - principalPaid
+}

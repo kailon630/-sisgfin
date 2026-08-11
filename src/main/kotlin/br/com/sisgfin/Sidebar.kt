@@ -120,6 +120,13 @@ fun Sidebar(
             ) { onNavigate(Screen.Transactions) }
 
             SidebarItem(
+                icon     = Icons.Outlined.CreditCardOff,
+                label    = "Contas a Pagar",
+                selected = currentScreen is Screen.Payables,
+                expanded = isExpanded
+            ) { onNavigate(Screen.Payables) }
+
+            SidebarItem(
                 icon     = Icons.Outlined.Payments,
                 label    = "Recebíveis",
                 selected = currentScreen is Screen.Receivables,

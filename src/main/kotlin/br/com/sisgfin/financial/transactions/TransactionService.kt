@@ -54,6 +54,9 @@ class TransactionService(
 
     fun findById(id: Int): Transaction? = repository.findById(id)
 
+    // F0: ponto de leitura unificado para telas que usam TransactionQuery
+    fun listByQuery(query: TransactionQuery): List<Transaction> = repository.find(query)
+
     fun create(transaction: Transaction): Int {
         val n = transaction.installmentTotal ?: 1
         val totalAmount = transaction.amount
@@ -99,6 +102,27 @@ class TransactionService(
     fun update(transaction: Transaction) {
         val existing = repository.findById(transaction.id)
             ?: throw IllegalArgumentException("Transação não encontrada.")
+
+        // C2: lançamento terminal não permite alteração de campos financeiros
+        if (TransactionStateMachine.isTerminal(existing.status)) {
+            val alterouCampoFinanceiro =
+                transaction.amount != existing.amount ||
+                transaction.accountId != existing.accountId ||
+                transaction.paymentDate != existing.paymentDate ||
+                transaction.type != existing.type ||
+                transaction.dueDate != existing.dueDate ||
+                transaction.paidAmount != existing.paidAmount ||
+                transaction.interestAmount != existing.interestAmount ||
+                transaction.fineAmount != existing.fineAmount
+
+            if (alterouCampoFinanceiro) {
+                throw IllegalStateException(
+                    "Lançamento ${existing.status.displayName} não permite alteração de campos financeiros. " +
+                    "Utilize estorno."
+                )
+            }
+        }
+
         TransactionValidator.validateForSave(transaction, existing)
         validateAccount(transaction.accountId)
         validateSupplier(transaction.supplierId)
@@ -110,10 +134,11 @@ class TransactionService(
 
         repository.update(transaction.copy(updatedAt = LocalDateTime.now()))
 
+        val reclassMsg = buildReclassificationMessage(existing, transaction)
         addTimeline(
             transaction.id,
             TimelineEventType.UPDATED,
-            "Dados da transação atualizados",
+            reclassMsg ?: "Dados da transação atualizados",
             transaction.amount,
             existing.status,
             transaction.status
@@ -135,6 +160,34 @@ class TransactionService(
                 auditDetail(transaction.status, existing.status, transaction.amount)
             )
         }
+    }
+
+    /** Diff de campos não-financeiros para timeline (reclassificação pós-liquidação). */
+    private fun buildReclassificationMessage(existing: Transaction, updated: Transaction): String? {
+        val parts = mutableListOf<String>()
+        if (existing.notes != updated.notes) {
+            parts += "notes: '${existing.notes}' → '${updated.notes}'"
+        }
+        if (existing.documentNumber != updated.documentNumber) {
+            parts += "documentNumber: '${existing.documentNumber}' → '${updated.documentNumber}'"
+        }
+        if (existing.documentType != updated.documentType) {
+            parts += "documentType: '${existing.documentType}' → '${updated.documentType}'"
+        }
+        if (existing.categoryId != updated.categoryId) {
+            parts += "categoryId: ${existing.categoryId} → ${updated.categoryId}"
+        }
+        if (existing.costCenterId != updated.costCenterId) {
+            parts += "costCenterId: ${existing.costCenterId} → ${updated.costCenterId}"
+        }
+        if (existing.projectId != updated.projectId) {
+            parts += "projectId: ${existing.projectId} → ${updated.projectId}"
+        }
+        if (existing.description != updated.description) {
+            parts += "description: '${existing.description}' → '${updated.description}'"
+        }
+        if (parts.isEmpty()) return null
+        return "Reclassificação: " + parts.joinToString("; ")
     }
 
     override fun save(item: Transaction) {
@@ -248,7 +301,7 @@ class TransactionService(
         return sourceId to destinationId
     }
 
-    // RN-14/22/23: cria estorno de lançamento PAID com justificativa obrigatória
+    // RN-14/22/23 + C1: cria estorno de lançamento PAID com justificativa e direção
     fun reverseTransaction(originalId: Int, justification: String): Int {
         requirePermission(Permission.ConfirmPayment)
         // RN-22: justificativa obrigatória
@@ -259,16 +312,8 @@ class TransactionService(
         val original = repository.findById(originalId)
             ?: throw IllegalArgumentException("Lançamento não encontrado.")
 
-        // RN-23: somente lançamentos PAID podem ser estornados
-        if (original.status != TransactionStatus.PAID) {
-            throw IllegalStateException(
-                "Apenas lançamentos com status Pago podem ser estornados. " +
-                "Status atual: ${original.status.displayName}."
-            )
-        }
-        if (original.type == TransactionType.REVERSAL) {
-            throw IllegalArgumentException("Não é possível estornar um lançamento de estorno.")
-        }
+        ReversalEligibility.assertCanReverse(original)
+
         if (repository.hasReversal(originalId)) {
             throw IllegalStateException("Este lançamento já possui um estorno registrado.")
         }
@@ -294,14 +339,15 @@ class TransactionService(
             parentTransactionId = originalId,
             createdBy = userId,
             createdAt = now,
-            updatedAt = now
+            updatedAt = now,
+            reversedType = original.type
         )
         val reversalId = repository.insert(reversal)
 
         addTimeline(reversalId, TimelineEventType.REVERSAL_OF,
             "Estorno do lançamento #$originalId", reversal.amount, null, TransactionStatus.PAID)
         audit("TRANSACTION_REVERSAL_CREATED", reversalId,
-            "original=#$originalId;justification=$justification;${auditDetail(TransactionStatus.PAID, null, reversal.amount)}")
+            "original=#$originalId;reversedType=${original.type};justification=$justification;${auditDetail(TransactionStatus.PAID, null, reversal.amount)}")
 
         addTimeline(originalId, TimelineEventType.REVERSED,
             "Estornado — ver lançamento #$reversalId. Motivo: $justification",
@@ -328,53 +374,68 @@ class TransactionService(
         if (!TransactionStateMachine.allowsPayment(existing.status)) {
             throw IllegalStateException("Status ${existing.status.displayName} não permite quitação.")
         }
-        TransactionValidator.validatePayment(existing.amount, paidAmount, paymentDate, existing.issueDate)
+
+        val juros = interestAmount ?: Money.ZERO
+        val multa = fineAmount ?: Money.ZERO
+
+        TransactionValidator.validatePayment(
+            outstanding = existing.outstandingPrincipal,
+            principal   = paidAmount,
+            interest    = interestAmount,
+            fine        = fineAmount,
+            paymentDate = paymentDate,
+            issueDate   = existing.issueDate
+        )
+
+        // Acumula sobre o que já existe — paidAmount armazena (principal + juros + multa) cumulativos
+        val newPaidAmount     = (existing.paidAmount     ?: Money.ZERO) + paidAmount + juros + multa
+        val newInterestAmount = (existing.interestAmount ?: Money.ZERO) + juros
+        val newFineAmount     = (existing.fineAmount     ?: Money.ZERO) + multa
+        val newPrincipalPaid  = newPaidAmount - newInterestAmount - newFineAmount
 
         val newStatus = TransactionStateMachine.resolveStatusAfterPayment(
             existing.amount.value,
-            paidAmount.value
+            newPrincipalPaid.value
         )
         TransactionStateMachine.assertTransition(existing.status, newStatus)
 
+        val cashThisBaixa = paidAmount + juros + multa
+        val newOutstanding  = existing.outstandingPrincipal - paidAmount
+
         val updated = existing.copy(
-            status = newStatus,
-            paymentDate = paymentDate,
-            paidAmount = paidAmount,
-            interestAmount = interestAmount,
-            fineAmount = fineAmount,
-            updatedAt = LocalDateTime.now()
+            status         = newStatus,
+            paymentDate    = paymentDate,
+            paidAmount     = newPaidAmount,
+            interestAmount = if (newInterestAmount.isZero()) null else newInterestAmount,
+            fineAmount     = if (newFineAmount.isZero()) null else newFineAmount,
+            updatedAt      = LocalDateTime.now()
         )
         TransactionValidator.validateForSave(updated, existing)
         repository.update(updated)
 
-        ledgerService.recordPayment(updated, paidAmount, paymentDate)
+        ledgerService.recordPayment(updated, cashThisBaixa, paymentDate)
 
         val timelineType = if (newStatus == TransactionStatus.PAID) {
             TimelineEventType.PAYMENT
         } else {
             TimelineEventType.PARTIAL_PAYMENT
         }
-        addTimeline(
-            id,
-            timelineType,
-            if (newStatus == TransactionStatus.PAID) {
-                "Quitada — ${paidAmount}"
-            } else {
-                "Pagamento parcial — ${paidAmount} de ${existing.amount}"
-            },
-            paidAmount,
-            existing.status,
-            newStatus
-        )
+        val timelineDesc = if (newStatus == TransactionStatus.PAID) {
+            "Quitada — $cashThisBaixa"
+        } else {
+            "Pagamento parcial — $paidAmount (saldo devedor: $newOutstanding)"
+        }
+        addTimeline(id, timelineType, timelineDesc, cashThisBaixa, existing.status, newStatus)
+
         val auditAction = if (newStatus == TransactionStatus.PAID) "TRANSACTION_PAID" else "TRANSACTION_PARTIAL_PAYMENT"
-        audit(auditAction, id, auditDetail(newStatus, existing.status, paidAmount))
-        audit("TRANSACTION_STATUS_CHANGED", id, auditDetail(newStatus, existing.status, paidAmount))
+        audit(auditAction, id, auditDetail(newStatus, existing.status, cashThisBaixa))
+        audit("TRANSACTION_STATUS_CHANGED", id, auditDetail(newStatus, existing.status, cashThisBaixa))
     }
 
     fun markAsPaid(id: Int, paymentDate: LocalDateTime = LocalDateTime.now()) {
         requirePermission(Permission.ConfirmPayment)
         val existing = repository.findById(id) ?: throw IllegalArgumentException("Transação não encontrada.")
-        recordPayment(id, paymentDate, existing.amount)
+        recordPayment(id, paymentDate, existing.outstandingPrincipal)
     }
 
     fun duplicate(id: Int): Int {

@@ -68,6 +68,8 @@ dependencies {
     // Testing
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testImplementation("io.mockk:mockk:1.13.12")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }
 
 tasks.test {
@@ -77,6 +79,7 @@ tasks.test {
 compose.desktop {
     application {
         mainClass = "br.com.sisgfin.MainKt"
+        jvmArgs("-Djdk.lang.Process.launchMechanism=VFORK")
         nativeDistributions {
             targetFormats(
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi,

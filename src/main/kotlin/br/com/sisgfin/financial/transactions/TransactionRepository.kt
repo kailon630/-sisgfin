@@ -25,6 +25,55 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             .singleOrNull()
     }
 
+    // F0: ponto de entrada único — todos os findX de leitura expressáveis como TransactionQuery
+    fun find(query: TransactionQuery): List<Transaction> = transaction {
+        val stmt = FinancialTransactionsTable.selectAll()
+
+        if (query.onlyActive)
+            stmt.andWhere { FinancialTransactionsTable.isActive eq true }
+        if (query.types.isNotEmpty())
+            stmt.andWhere { FinancialTransactionsTable.type inList query.types.map { it.name } }
+        if (query.statuses.isNotEmpty())
+            stmt.andWhere { FinancialTransactionsTable.status inList query.statuses.map { it.name } }
+
+        query.from?.let { f ->
+            stmt.andWhere {
+                when (query.dateAxis) {
+                    DateAxis.ISSUE   -> FinancialTransactionsTable.issueDate greaterEq f.atStartOfDay()
+                    DateAxis.DUE     -> FinancialTransactionsTable.dueDate greaterEq f.atStartOfDay()
+                    DateAxis.PAYMENT -> FinancialTransactionsTable.paymentDate greaterEq f.atStartOfDay()
+                }
+            }
+        }
+        query.to?.let { t ->
+            stmt.andWhere {
+                when (query.dateAxis) {
+                    DateAxis.ISSUE   -> FinancialTransactionsTable.issueDate less t.plusDays(1).atStartOfDay()
+                    DateAxis.DUE     -> FinancialTransactionsTable.dueDate less t.plusDays(1).atStartOfDay()
+                    DateAxis.PAYMENT -> FinancialTransactionsTable.paymentDate less t.plusDays(1).atStartOfDay()
+                }
+            }
+        }
+
+        query.accountId?.let    { stmt.andWhere { FinancialTransactionsTable.accountId    eq it } }
+        query.supplierId?.let   { stmt.andWhere { FinancialTransactionsTable.supplierId   eq it } }
+        query.employeeId?.let   { stmt.andWhere { FinancialTransactionsTable.employeeId   eq it } }
+        query.costCenterId?.let { stmt.andWhere { FinancialTransactionsTable.costCenterId eq it } }
+        query.categoryId?.let   { stmt.andWhere { FinancialTransactionsTable.categoryId   eq it } }
+        query.projectId?.let    { stmt.andWhere { FinancialTransactionsTable.projectId    eq it } }
+        query.contractId?.let   { stmt.andWhere { FinancialTransactionsTable.contractId   eq it } }
+        query.search?.trim()?.takeIf { it.isNotBlank() }?.let { s ->
+            stmt.andWhere { FinancialTransactionsTable.description like "%$s%" }
+        }
+
+        stmt
+            .orderBy(
+                FinancialTransactionsTable.dueDate to SortOrder.ASC,
+                FinancialTransactionsTable.id      to SortOrder.ASC
+            )
+            .map { rowToTransaction(it) }
+    }
+
     fun findPendingActive(): List<Transaction> = transaction {
         FinancialTransactionsTable
             .selectAll()
@@ -182,6 +231,7 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             it[FinancialTransactionsTable.interestAmount]       = entity.interestAmount?.value
             it[FinancialTransactionsTable.fineAmount]           = entity.fineAmount?.value
             it[FinancialTransactionsTable.projectId]            = entity.projectId
+            it[FinancialTransactionsTable.reversedType]         = entity.reversedType?.name
         } get FinancialTransactionsTable.id
     }
 
@@ -215,7 +265,7 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
                 it[FinancialTransactionsTable.interestAmount]       = entity.interestAmount?.value
                 it[FinancialTransactionsTable.fineAmount]           = entity.fineAmount?.value
                 it[FinancialTransactionsTable.projectId]            = entity.projectId
-                // employeeId não é atualizado via update geral — é definido apenas na criação
+                // employeeId e reversedType não são atualizados via update geral — definidos na criação
             }
         }
     }
@@ -323,6 +373,22 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             ?.toMoney() ?: Money.ZERO
     }
 
+    // RN-04 (PARTIAL): soma de paidAmount de lançamentos PARTIAL por conta e tipo
+    fun sumPartialPaid(accountId: Int, type: TransactionType): Money = transaction {
+        val sumExpr = FinancialTransactionsTable.paidAmount.sum()
+        FinancialTransactionsTable
+            .select(sumExpr)
+            .where {
+                (FinancialTransactionsTable.accountId eq accountId) and
+                (FinancialTransactionsTable.type eq type.name) and
+                (FinancialTransactionsTable.status eq TransactionStatus.PARTIAL.name) and
+                (FinancialTransactionsTable.isActive eq true)
+            }
+            .firstOrNull()
+            ?.get(sumExpr)
+            ?.toMoney() ?: Money.ZERO
+    }
+
     // RN-21: destino de uma transferência (filho com type=TRANSFER)
     fun findTransferDestination(sourceId: Int): Transaction? = transaction {
         FinancialTransactionsTable
@@ -346,6 +412,22 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             }
             .limit(1)
             .count() > 0
+    }
+
+    // RN-04 (C1): estornos PAID filtrados pelo tipo do lançamento original (reversed_type)
+    fun sumPaidReversalOf(accountId: Int, originalTypes: List<TransactionType>): Money = transaction {
+        if (originalTypes.isEmpty()) return@transaction Money.ZERO
+        val sumExpr = FinancialTransactionsTable.amount.sum()
+        FinancialTransactionsTable
+            .select(sumExpr)
+            .where {
+                (FinancialTransactionsTable.accountId eq accountId) and
+                (FinancialTransactionsTable.type eq TransactionType.REVERSAL.name) and
+                (FinancialTransactionsTable.status eq TransactionStatus.PAID.name) and
+                (FinancialTransactionsTable.isActive eq true) and
+                (FinancialTransactionsTable.reversedType inList originalTypes.map { it.name })
+            }
+            .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
     }
 
     // RN-04 (extensão): transferências que ENTRAM na conta (destino, tem parentId)
@@ -501,14 +583,63 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
     }
 
+    // RN-04 (PARTIAL): saldo de abertura considera paidAmount de lançamentos PARTIAL antes do período
+    private fun sumPartialPaidBefore(accountId: Int, type: TransactionType, before: LocalDate): Money = transaction {
+        val sumExpr = FinancialTransactionsTable.paidAmount.sum()
+        FinancialTransactionsTable.select(sumExpr)
+            .where {
+                (FinancialTransactionsTable.accountId eq accountId) and
+                (FinancialTransactionsTable.type eq type.name) and
+                (FinancialTransactionsTable.status eq TransactionStatus.PARTIAL.name) and
+                (FinancialTransactionsTable.isActive eq true) and
+                (FinancialTransactionsTable.paymentDate less before.atStartOfDay())
+            }
+            .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
+    }
+
+    private fun sumPaidReversalOfBefore(
+        accountId: Int,
+        originalTypes: List<TransactionType>,
+        before: LocalDate
+    ): Money = transaction {
+        if (originalTypes.isEmpty()) return@transaction Money.ZERO
+        val sumExpr = FinancialTransactionsTable.amount.sum()
+        FinancialTransactionsTable.select(sumExpr)
+            .where {
+                (FinancialTransactionsTable.accountId eq accountId) and
+                (FinancialTransactionsTable.type eq TransactionType.REVERSAL.name) and
+                (FinancialTransactionsTable.status eq TransactionStatus.PAID.name) and
+                (FinancialTransactionsTable.isActive eq true) and
+                (FinancialTransactionsTable.reversedType inList originalTypes.map { it.name }) and
+                (FinancialTransactionsTable.paymentDate less before.atStartOfDay())
+            }
+            .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
+    }
+
     fun openingBalance(initialBalance: Money, accountId: Int, before: LocalDate): Money {
-        val income     = sumPaidBefore(accountId, TransactionType.INCOME, before)
-        val expense    = sumPaidBefore(accountId, TransactionType.EXPENSE, before)
-        val reversal   = sumPaidBefore(accountId, TransactionType.REVERSAL, before)
-        val adjustment = sumPaidBefore(accountId, TransactionType.ADJUSTMENT, before)
-        val transferIn  = sumPaidTransferInBefore(accountId, before)
-        val transferOut = sumPaidTransferOutBefore(accountId, before)
-        return initialBalance + income + reversal + adjustment + transferIn - expense - transferOut
+        val income          = sumPaidBefore(accountId, TransactionType.INCOME, before)
+        val expense         = sumPaidBefore(accountId, TransactionType.EXPENSE, before)
+        val adjustment      = sumPaidBefore(accountId, TransactionType.ADJUSTMENT, before)
+        val transferIn      = sumPaidTransferInBefore(accountId, before)
+        val transferOut     = sumPaidTransferOutBefore(accountId, before)
+        val incomePartial   = sumPartialPaidBefore(accountId, TransactionType.INCOME, before)
+        val expensePartial  = sumPartialPaidBefore(accountId, TransactionType.EXPENSE, before)
+        val reversalCredit  = sumPaidReversalOfBefore(accountId, listOf(TransactionType.EXPENSE), before)
+        val reversalDebit   = sumPaidReversalOfBefore(
+            accountId, listOf(TransactionType.INCOME, TransactionType.ADJUSTMENT), before
+        )
+        return br.com.sisgfin.financial.accounts.AccountBalanceFormula.compute(
+            initialBalance = initialBalance,
+            income = income,
+            incomePartial = incomePartial,
+            expense = expense,
+            expensePartial = expensePartial,
+            adjustment = adjustment,
+            transferIn = transferIn,
+            transferOut = transferOut,
+            reversalCredit = reversalCredit,
+            reversalDebit = reversalDebit
+        )
     }
 
     // Painel de saldos: soma de lançamentos ATIVOS por status e conta
@@ -640,7 +771,8 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
         contractId            = row[FinancialTransactionsTable.contractId],
         interestAmount        = row[FinancialTransactionsTable.interestAmount]?.toMoney(),
         fineAmount            = row[FinancialTransactionsTable.fineAmount]?.toMoney(),
-        projectId             = row[FinancialTransactionsTable.projectId]
+        projectId             = row[FinancialTransactionsTable.projectId],
+        reversedType          = row[FinancialTransactionsTable.reversedType]?.let { TransactionType.valueOf(it) }
     )
 
     // Fase 7-B: soma paidAmount das transações PAID vinculadas ao contrato

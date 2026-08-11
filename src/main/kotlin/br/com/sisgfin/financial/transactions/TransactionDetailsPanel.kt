@@ -359,10 +359,12 @@ fun TransactionDetailsPanel(
                 }
                 if (projectOptions.isNotEmpty()) {
                     WsSelectField(
-                        label = "PROJETO",
+                        label = "PROJETO (opcional)",
                         options = projectOptions,
                         selectedId = projectId,
-                        onSelect = { projectId = it }
+                        onSelect = { projectId = it },
+                        placeholder = "Sem projeto vinculado",
+                        nullable = true
                     )
                 }
                 if (categoryOptions.isNotEmpty()) {

@@ -30,6 +30,7 @@ object TransactionStateMachine {
         ),
         TransactionStatus.PARTIAL to setOf(
             TransactionStatus.PAID,
+            TransactionStatus.PARTIAL,
             TransactionStatus.CANCELED
         ),
         TransactionStatus.PAID to emptySet(),

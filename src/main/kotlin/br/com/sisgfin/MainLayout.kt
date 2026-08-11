@@ -43,6 +43,8 @@ import br.com.sisgfin.clients.ClientsScreen
 import br.com.sisgfin.clients.ClientsViewModel
 import br.com.sisgfin.contracts.ContractViewModel
 import br.com.sisgfin.contracts.ContractsScreen
+import br.com.sisgfin.payables.PayablesScreen
+import br.com.sisgfin.payables.PayablesViewModel
 import br.com.sisgfin.receivables.ReceivablesScreen
 import br.com.sisgfin.receivables.ReceivablesViewModel
 import br.com.sisgfin.recurrence.RecurringScreen
@@ -136,6 +138,7 @@ fun MainLayout(
                 is Screen.Recurring     -> "Recorrências"
                 is Screen.Contracts     -> "Contratos"
                 is Screen.Clients        -> "Clientes"
+                is Screen.Payables      -> "Contas a Pagar"
                 is Screen.Receivables   -> "Contas a Receber"
                 is Screen.PayrollImport -> "Importar Folha de Pagamento"
                 else                     -> ""
@@ -236,6 +239,12 @@ fun MainLayout(
                             )
                             is Screen.Clients -> ClientsScreen(
                                 viewModel = clientsViewModel,
+                                onShowRightPanel = { rightPanelContent = it },
+                                onCloseRightPanel = { rightPanelContent = null }
+                            )
+                            is Screen.Payables -> PayablesScreen(
+                                viewModel = koinInject<PayablesViewModel>(),
+                                transactionsViewModel = transactionsViewModel,
                                 onShowRightPanel = { rightPanelContent = it },
                                 onCloseRightPanel = { rightPanelContent = null }
                             )

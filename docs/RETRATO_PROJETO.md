@@ -1,5 +1,5 @@
 # SisgFin — Retrato Atual do Projeto
-> Atualizado em 2026-07-14. Use este arquivo como contexto inicial em novos chats para evitar re-exploração do projeto.
+> Atualizado em 2026-08-10. Use este arquivo como contexto inicial em novos chats para evitar re-exploração do projeto.
 
 ---
 
@@ -11,7 +11,7 @@
 |------|-------|
 | **Cliente** | Associação Terapêutica Cannabis Medicinal Flor da Vida |
 | **Finalidade** | Substituir planilha `Controle Finan.xlsm` — gestão de convênio público (501.145-0) com conformidade TCESP/AUDESP |
-| **Versão** | 1.0.5 (packageVersion no build) |
+| **Versão** | 1.0.8 (packageVersion no build) |
 | **Raiz do projeto** | `/home/kailon/IdeaProjects/SisgFin/` |
 | **Banco de dados** | PostgreSQL (via JDBC + Flyway + Exposed ORM) |
 | **Build** | Gradle (Kotlin DSL) |
@@ -67,7 +67,7 @@ src/main/
 │   │
 │   ├── FinancialModels.kt             ← Supplier, FinancialAccount, CostCenter
 │   ├── FinancialRepositories.kt       ← FinancialAccountRepository, CostCenterRepository…
-│   ├── FinancialServices.kt           ← FinancialAccountService, CostCenterService, SupplierService…
+│   ├── FinancialServices.kt           ← FinancialAccountService (calculateBalance inclui PARTIAL via sumPartialPaid), CostCenterService, SupplierService…
 │   ├── Tables.kt                      ← tabelas Exposed: Users, Suppliers, FinancialAccounts, CostCenters (=projects), Employees, Accounts, Transactions (legado)
 │   ├── AccountRepository.kt           ← repo legado (tabela accounts)
 │   ├── LegacyTransactionRepository.kt ← repo legado (tabela transactions)
@@ -169,6 +169,8 @@ src/main/
 │   │   └── PayrollEngine.kt           ← geração automática de lançamentos mensais por funcionário
 │   │
 │   ├── financial/
+│   │   ├── banking/
+│   │   │   └── BankList.kt            ← lista de bancos COMPE para selects
 │   │   ├── categories/
 │   │   │   ├── CategoriesScreen.kt
 │   │   │   ├── ExpenseCategory.kt     ← code, name, groupCode, isIncome
@@ -183,6 +185,13 @@ src/main/
 │   │   │   ├── MoneyExtensions.kt
 │   │   │   ├── MoneyFormatter.kt
 │   │   │   └── RoundingPolicy.kt
+│   │   ├── projects/
+│   │   │   ├── Project.kt             ← Project, ProjectStatus (PLANEJAMENTO/EM_ANDAMENTO/CONCLUIDO/CANCELADO)
+│   │   │   ├── ProjectRepository.kt
+│   │   │   ├── ProjectService.kt
+│   │   │   ├── ProjectsScreen.kt      ← CRUD de Projetos com status/orçamento/datas
+│   │   │   ├── ProjectsTable.kt
+│   │   │   └── ProjectViewModel.kt
 │   │   └── transactions/
 │   │       ├── Transaction.kt         ← entidade principal do motor transacional
 │   │       ├── FinancialTransactionsTable.kt
@@ -208,8 +217,9 @@ src/main/
 │   │           └── TransactionTimelineRepository.kt
 │   │
 │   ├── payroll/
+│   │   ├── PayrollBankExporter.kt         ← gera XLSX remessa bancária BB (ADIANTAMENTO ou LIQUIDO)
 │   │   ├── PayrollImportModels.kt         ← PayrollRawEntry, PayrollEntry, PayrollImportResult, PayrollImportBatch
-│   │   ├── PayrollImportScreen.kt         ← wizard 4 etapas: SelectFile→Preview→Processando→Resultado
+│   │   ├── PayrollImportScreen.kt         ← wizard 4 etapas: SelectFile→Preview→Processando→Resultado; drag & drop
 │   │   ├── PayrollImportService.kt        ← import() + confirm() + coordenação com PayrollEngine
 │   │   ├── PayrollImportUiState.kt        ← estados do wizard
 │   │   ├── PayrollImportViewModel.kt      ← CoroutineScope; parseFile, toggleEntry, confirm
@@ -218,7 +228,7 @@ src/main/
 │   ├── ofx/
 │   │   ├── OfxImport.kt
 │   │   ├── OfxImportRepository.kt
-│   │   ├── OfxImportScreen.kt         ← wizard 4 etapas: SelectFile→Preview→Reconcile→Done
+│   │   ├── OfxImportScreen.kt         ← wizard 4 etapas: SelectFile→Preview→Reconcile→Done; drag & drop; ações rápidas em previsões
 │   │   ├── OfxImportService.kt
 │   │   ├── OfxImportsTable.kt
 │   │   ├── OfxImportViewModel.kt
@@ -298,7 +308,11 @@ src/main/
         ├── V21__contracts.sql
         ├── V22__transaction_contract_fk.sql
         ├── V23__supplier_entity_type.sql
-        └── V24__employee_supplier_fk.sql    ← supplier_id nullable em employees
+        ├── V24__employee_supplier_fk.sql    ← supplier_id nullable em employees (depois removido em V26)
+        ├── V25__employee_banking_fields.sql ← bank_code, agency_number/dv, account_number/dv, account_type em employees
+        ├── V26__drop_employee_supplier_fk.sql ← remove supplier_id de employees (PJ sem vinculo obrigatório)
+        ├── V27__transaction_charges.sql     ← interest_amount, fine_amount em financial_transactions
+        └── V28__financial_projects.sql      ← tabela financial_projects + FK em financial_transactions e recurrence_templates
 ```
 
 ---
@@ -341,12 +355,15 @@ data class Transaction(
     id, type: TransactionType, status: TransactionStatus,
     description, amount: Money, issueDate, dueDate,
     paymentDate?, paidAmount?: Money,
+    interestAmount?: Money,   // juros (breakdown informativo do paidAmount)
+    fineAmount?: Money,       // multa (breakdown informativo do paidAmount)
     accountId, supplierId?, costCenterId?,
     categoryId?, documentType?, documentNumber?,
     installmentCurrent?, installmentTotal?,
     parentTransactionId?,   // parcelamento e estorno
     recurrenceTemplateId?,  // vínculo com recorrência
     contractId?,            // vínculo com contrato
+    financialProjectId?,    // vínculo com Projeto (independente de CostCenter)
     ofxFitId?,              // importação OFX
     reconciledWithFitId?,   // conciliação manual
     employeeId?,            // gerado pelo PayrollEngine
@@ -441,6 +458,25 @@ data class RecurrenceTemplate(
 paymentDay: Int        // dia principal de pagamento
 paymentDays: String?   // ex: "5,20" — se preenchido, PayrollEngine gera lançamentos
 employmentType: String? // CLT | PJ | ESTAGIO | OUTROS
+// campos bancários para remessa bancária (V25):
+bankCode: String?      // código COMPE (3 dígitos)
+agencyNumber: String?
+agencyDv: String?
+accountNumber: String?
+accountDv: String?
+accountType: String?   // default "CS" (conta corrente)
+```
+
+### Project — Projeto (tabela `financial_projects`)
+> Entidade independente de CostCenter; permite vincular transações e recorrências a projetos com orçamento e cronograma.
+```kotlin
+data class Project(
+    id, code, name, description?,
+    status: ProjectStatus,  // PLANEJAMENTO | EM_ANDAMENTO | CONCLUIDO | CANCELADO
+    budget: Money?,
+    startDate?, expectedEnd?, actualEnd?,
+    isActive, createdAt, updatedAt, createdBy?
+)
 ```
 
 ---
@@ -464,8 +500,9 @@ Controle de tela em `NavigationState.currentScreen: Screen`.
 | `Recurring` | recurrence/RecurringScreen.kt | templates de recorrência |
 | `Contracts` | contracts/ContractsScreen.kt | contratos com barra de consumo |
 | `Clients` | clients/ClientsScreen.kt | fornecedores com entityType=CLIENTE |
-| `Receivables` | receivables/ReceivablesScreen.kt | contas a receber com aging (4 tiles: A vencer / 1-30d / 31-60d / 61+d) |
-| `PayrollImport` | payroll/PayrollImportScreen.kt | wizard importação folha XLSX (SCI Ambiente Contábil ÚNICO) |
+| `Receivables` | receivables/ReceivablesScreen.kt | contas a receber com aging (4 tiles: A vencer / 1-30d / 31-60d / 61+d); `ReceivablesViewModel` injeta `TransactionService` e chama `syncOverdueStatuses()` antes de `findReceivables()` |
+| `PayrollImport` | payroll/PayrollImportScreen.kt | wizard importação folha XLSX (SCI Ambiente Contábil ÚNICO); drag & drop; exporta remessa BB |
+| `Projects` | financial/projects/ProjectsScreen.kt | CRUD de Projetos com status, orçamento e cronograma |
 | `Suppliers` | SupplierManagementScreen.kt | CRUD fornecedores |
 | `CostCenters` | ProjectsManagementScreen.kt | CRUD centros de custo |
 | `Categories` | financial/categories/CategoriesScreen.kt | CRUD naturezas financeiras |
@@ -499,7 +536,7 @@ CANCELED → (terminal)
 | RN-01 | V11 + SupplierService | UNIQUE em suppliers.document |
 | RN-02 | TransactionService | bloqueia fornecedor inativo em lançamento |
 | RN-03 | DocumentValidator | validação CPF/CNPJ dígitos verificadores |
-| RN-04 | FinancialAccountService | saldo = inicial + ΣPAID entradas − ΣPAID saídas + ADJUSTMENT |
+| RN-04 | FinancialAccountService | saldo = inicial + Σ(INCOME PAID) + Σ(INCOME PARTIAL.paidAmount) + ADJUSTMENT + transferIn − Σ(EXPENSE PAID) − Σ(EXPENSE PARTIAL.paidAmount) − transferOut |
 | RN-05 | FinancialAccountService | bloqueia inativação de conta com saldo ≠ 0 |
 | RN-06 | FinancialAccountType | tipo INVESTMENT + investmentBroker; rendimentos como ADJUSTMENT |
 | RN-07 | CostCenterService | bloqueia delete de CC com transações vinculadas |
@@ -510,7 +547,7 @@ CANCELED → (terminal)
 | RN-12 | SessionManager + Permission | ADMIN acesso total; OPERADOR não confirma pagamento |
 | RN-13 | TransactionStateMachine | estados terminais PAID e CANCELED |
 | RN-14 | TransactionService.reverseTransaction() | cria REVERSAL com parentTransactionId |
-| RN-15 | OverdueEngine | job automático PENDING→OVERDUE em listAll() |
+| RN-15 | OverdueEngine | job automático PENDING→OVERDUE; chamado em `TransactionService.listAll()` (tela de Transações / API) e em `ReceivablesViewModel.load()` (tela de Recebíveis) |
 | RN-16 | TransactionValidator | paymentDate >= issueDate |
 | RN-17/18/19 | TransactionService | parcelamento: gera filhos mensais; última absorve arredondamento; cancel cascateia |
 | RN-20/21 | TransactionService.createTransfer() | par TRANSFER atômico; cancel cascateia par |
@@ -589,10 +626,11 @@ Tokens principais:
 - `WsDanger`, `WsWarning (#E6A817)`, `WsSuccess`, `WsInfo (#58A6FF)`
 - `WsMoneyStyle` / `WsMoneyStyleLarge` — monospace, tracking negativo
 
-Componentes reutilizáveis em `WsControls.kt`:
+Componentes reutilizáveis em `WsControls.kt` / `DesktopComponents.kt`:
 - `WsTextField`, `WsDateField` (máscara dd/MM/yyyy), `WsSelectField`, `WsMoneyField`
+- `WsDocumentField` (`DesktopComponents.kt:606`) — campo CPF/CNPJ com máscara automática e toggle de tipo
 - `WsButton`, `WsOutlinedButton`, variantes de `WsButtonVariants.kt`
-- `BaseCrudPanel` (painel lateral genérico), `BaseCrudPanel`
+- `BaseCrudPanel` (painel lateral genérico)
 - `MoneyText(amount, large, color)` para valores monetários
 
 ---
@@ -601,18 +639,22 @@ Componentes reutilizáveis em `WsControls.kt`:
 
 ```
 src/test/kotlin/br/com/sisgfin/
-├── core/validation/DocumentValidatorTest.kt     ← 15 testes CPF/CNPJ
-├── financial/money/MoneyTest.kt
+├── core/validation/DocumentValidatorTest.kt     ← 18 testes CPF/CNPJ
+├── financial/money/MoneyTest.kt                 ← 6 testes
 ├── financial/transactions/
-│   ├── InstallmentCalculatorTest.kt
-│   ├── TransactionValidatorTest.kt
-│   └── TransferAndReversalTest.kt
+│   ├── InstallmentCalculatorTest.kt             ← 15 testes
+│   ├── PartialBalanceTest.kt                    ← 11 testes (fórmula PARTIAL em saldo e openingBalance)
+│   ├── TransactionValidatorTest.kt              ← 17 testes
+│   └── TransferAndReversalTest.kt               ← 18 testes
 ├── financial/transactions/workflow/
-│   └── TransactionWorkflowTest.kt
-├── ofx/OfxParserTest.kt                        ← 12 testes + arquivo OFX real jan/2026
-├── payroll/PayrollXlsxParserTest.kt            ← 6 testes (3 com arquivo real 80 func. + 3 sintéticos)
-└── recurrence/RecurrenceEngineTest.kt
+│   ├── OverdueEngineTest.kt                     ← 6 testes (T1-T6: regra isBefore, PAID/CANCELED/inativo)
+│   └── TransactionWorkflowTest.kt               ← 3 testes
+├── ofx/OfxParserTest.kt                         ← 12 testes + arquivo OFX real jan/2026
+├── payroll/PayrollXlsxParserTest.kt             ← 8 testes (3 arquivo real 80 func. + 3 sintéticos + 2 parser)
+└── recurrence/RecurrenceEngineTest.kt           ← 17 testes
 ```
+
+**Total: 131 testes — BUILD SUCCESSFUL**
 
 ---
 
@@ -633,7 +675,15 @@ src/test/kotlin/br/com/sisgfin/
 | Recorrência | ✅ | RecurrenceEngine + RecurringScreen + RecurrenceDateCalculator + testes |
 | Contratos | ✅ | ContractService + ContractsScreen + barra de consumo |
 | Clientes/Recebíveis | ✅ | EntityType/V23 + ClientsScreen + ReceivablesScreen com aging 4 tiles |
-| Importação Folha XLSX | ✅ | PayrollXlsxParser + PayrollImportService + wizard 4 etapas; V24 FK employee→supplier |
+| Importação Folha XLSX | ✅ | PayrollXlsxParser + PayrollImportService + wizard 4 etapas; drag & drop; adiantamento salarial |
+| Dados bancários de funcionários | ✅ | V25 (bank_code/agency/account) + BankList; suporte a remessa BB |
+| Remessa Bancária BB | ✅ | PayrollBankExporter: XLSX formato BB para ADIANTAMENTO e LIQUIDO |
+| Juros/multa na quitação | ✅ | V27 + campos interestAmount/fineAmount em Transaction (breakdown informativo) |
+| Projetos financeiros | ✅ | V28 + módulo financial/projects: entidade com status/orçamento/cronograma; FK em transações e recorrências |
+| Drag & drop nos wizards | ✅ | OFX e Folha aceitam arrastar arquivo direto para área de drop |
+| Ações rápidas OFX | ✅ | Previsões não liquidadas na importação OFX têm ações rápidas (quitação direta) |
+| Correção saldo PARTIAL | ✅ | `sumPartialPaid()` + `sumPartialPaidBefore()` em `TransactionRepository`; `calculateBalance()` e `openingBalance()` incluem `paidAmount` de lançamentos PARTIAL (RN-04 atualizado); 11 testes em `PartialBalanceTest` |
+| Correção OVERDUE em Recebíveis | ✅ | `ReceivablesViewModel` injeta `TransactionService` e chama `syncOverdueStatuses()` antes de `findReceivables()`; 6 testes em `OverdueEngineTest` |
 | Backup automático | ❌ | não implementado |
 | Instalador MSI/DEB | ❌ | packaging configurado, mas não gerado |
 

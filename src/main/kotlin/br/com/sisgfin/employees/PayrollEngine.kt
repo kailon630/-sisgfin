@@ -65,14 +65,45 @@ class PayrollEngine(
     }
 
     // Gera para um único funcionário (chamado após salvar/reativar).
-    // Janela: mês corrente + próximo mês.
+    // Janela: mês corrente + próximo mês. Não passa por generateForMonth para não
+    // processar outros funcionários e evitar erros de validação cruzada.
     fun generateForEmployee(employeeId: Int): List<PayrollGenerationResult> {
         val employee = employeeRepository.getById(employeeId) ?: return emptyList()
         if (!employee.active || employee.effectivePaymentDays().isEmpty()) return emptyList()
+        if (employee.salary.isZero() || employee.salary.isNegative()) return emptyList()
+
+        val defaultAccountId = accountRepository.findAll()
+            .firstOrNull { it.isActive }?.id
+            ?: return emptyList()
 
         val now = YearMonth.now()
-        return listOf(now, now.plusMonths(1)).flatMap { yearMonth ->
-            generateForMonth(yearMonth).filter { it.employeeName == employee.name }
+        var generated = 0
+        var skipped   = 0
+
+        for (yearMonth in listOf(now, now.plusMonths(1))) {
+            for (day in employee.effectivePaymentDays()) {
+                val dueDate = yearMonth.atDay(day.coerceAtMost(yearMonth.lengthOfMonth()))
+                if (transactionRepository.existsPaymentForEmployee(employee.id, dueDate)) {
+                    skipped++
+                    continue
+                }
+                val monthLabel = yearMonth.format(monthFmt).replaceFirstChar { it.uppercase() }
+                transactionService.create(
+                    Transaction(
+                        type        = TransactionType.EXPENSE,
+                        status      = TransactionStatus.PENDING,
+                        description = "Pagamento ${employee.name} — $monthLabel",
+                        amount      = employee.salary,
+                        issueDate   = LocalDateTime.now(),
+                        dueDate     = dueDate.atStartOfDay(),
+                        accountId   = defaultAccountId,
+                        employeeId  = employee.id
+                    )
+                )
+                generated++
+            }
         }
+
+        return listOf(PayrollGenerationResult(generated, skipped, employee.name))
     }
 }

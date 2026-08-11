@@ -15,6 +15,7 @@ import br.com.sisgfin.financial.projects.ProjectViewModel
 import br.com.sisgfin.projects.CostCenterViewModel
 import br.com.sisgfin.clients.ClientsViewModel
 import br.com.sisgfin.contracts.ContractViewModel
+import br.com.sisgfin.payables.PayablesViewModel
 import br.com.sisgfin.receivables.ReceivablesViewModel
 import br.com.sisgfin.recurrence.RecurringViewModel
 import br.com.sisgfin.reports.ReportsViewModel
@@ -43,7 +44,8 @@ val viewModelModule = module {
     factory { CashFlowViewModel(get(), get(), get()) }
     factory { OfxImportViewModel(get(), get(), get(), get(), get(), get(), get()) }
     factory { ClientsViewModel(get(), get()) }
-    factory { ReceivablesViewModel(get(), get()) }
+    factory { PayablesViewModel(get(), get()) }
+    factory { ReceivablesViewModel(get(), get(), get()) }
     factory {
         PayrollImportViewModel(
             get(), // PayrollImportService
