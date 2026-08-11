@@ -7,6 +7,7 @@ import br.com.sisgfin.budget.BudgetItemRepository
 import br.com.sisgfin.financial.categories.ExpenseCategoryRepository
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.projects.ProjectRepository
+import br.com.sisgfin.financial.transactions.CounterpartyResolver
 import br.com.sisgfin.financial.transactions.TransactionRepository
 import br.com.sisgfin.financial.transactions.TransactionType
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +28,7 @@ class ReportsViewModel(
     private val budgetRepository: BudgetItemRepository,
     private val costCenterRepository: CostCenterRepository,
     private val categoryRepository: ExpenseCategoryRepository,
+    private val counterpartyResolver: CounterpartyResolver,
     private val projectRepository: ProjectRepository? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -54,21 +56,21 @@ class ReportsViewModel(
         scope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    val supplierMap = supplierRepository.findAll().associateBy { it.id }
                     val accountMap  = accountRepository.findAll().associateBy { it.id }
                     val txs = transactionRepository.findAllPaid(
                         from      = filter.from,
                         to        = filter.to,
                         accountId = filter.accountId
                     )
+                    val counterpartyMap = counterpartyResolver.resolve(txs)
                     txs.map { tx ->
-                        val supplierName = tx.supplierId?.let { supplierMap[it]?.name }
+                        val creditorName = counterpartyMap.nameFor(tx)
                         val accountName  = accountMap[tx.accountId]?.name ?: "#${tx.accountId}"
                         LivroDiarioEntry(
                             transaction  = tx,
-                            supplierName = supplierName,
+                            creditorName = creditorName,
                             accountName  = accountName,
-                            tcespDesc    = buildTcespDesc(tx, supplierName)
+                            tcespDesc    = buildTcespDesc(tx, creditorName)
                         )
                     }
                 }

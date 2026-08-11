@@ -51,6 +51,7 @@ fun TransactionsScreen(
     val listFilter by viewModel.listFilter.collectAsState()
     val transferDialogVisible by viewModel.transferDialogVisible.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
+    val counterparties by viewModel.counterparties.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     val searchFocus = remember { FocusRequester() }
     var contextMenuTx by remember { mutableStateOf<Transaction?>(null) }
@@ -204,6 +205,7 @@ fun TransactionsScreen(
                     items            = uiState.items,
                     selectedId       = uiState.selectedItem?.id,
                     grouped          = listFilter is TransactionListFilter.ActionRequired,
+                    counterparties   = counterparties,
                     onRowClick       = { openPanel(it) },
                     onRowDoubleClick = { viewModel.openDialog(it) },
                     onContextMenu    = {

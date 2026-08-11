@@ -17,7 +17,7 @@ data class LivroDiarioFilter(
 
 data class LivroDiarioEntry(
     val transaction: Transaction,
-    val supplierName: String?,
+    val creditorName: String?,
     val accountName: String,
     val tcespDesc: String
 )
@@ -58,12 +58,12 @@ data class ReportsUiState(
     val errorMessage: String? = null
 )
 
-fun buildTcespDesc(tx: Transaction, supplierName: String?): String {
+fun buildTcespDesc(tx: Transaction, creditorName: String?): String {
     val prefix = when (tx.type) {
         TransactionType.INCOME, TransactionType.REVERSAL -> "RECEBIDO DE,"
         else -> "PAGO A,"
     }
-    val creditor = (supplierName ?: tx.description).uppercase()
+    val creditor = (creditorName ?: "CREDOR NÃO IDENTIFICADO").uppercase()
     val docPart = when {
         tx.documentType != null && tx.documentNumber != null ->
             " CF ${tx.documentType.uppercase()} ${tx.documentNumber}"

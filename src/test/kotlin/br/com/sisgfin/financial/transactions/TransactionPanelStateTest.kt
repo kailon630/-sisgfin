@@ -11,6 +11,8 @@ import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.Runs
+import br.com.sisgfin.financial.transactions.CounterpartyResolver
+import br.com.sisgfin.financial.transactions.CounterpartyMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -37,23 +39,26 @@ class TransactionPanelStateTest {
     private lateinit var categoryRepo: ExpenseCategoryRepository
     private lateinit var sessionManager: SessionManager
     private lateinit var budgetRepo: BudgetItemRepository
+    private lateinit var counterpartyResolver: CounterpartyResolver
 
     @BeforeEach
     fun setUp() {
-        service       = mockk()
-        accountRepo   = mockk()
-        supplierRepo  = mockk()
-        costCenterRepo = mockk()
-        categoryRepo  = mockk()
-        sessionManager = mockk()
-        budgetRepo    = mockk()
+        service              = mockk()
+        accountRepo          = mockk()
+        supplierRepo         = mockk()
+        costCenterRepo       = mockk()
+        categoryRepo         = mockk()
+        sessionManager       = mockk()
+        budgetRepo           = mockk()
+        counterpartyResolver = mockk()
 
-        every { service.listAll()               } returns emptyList()
-        every { service.applyListFilter(any())  } just Runs
-        every { accountRepo.findAll()           } returns emptyList()
-        every { supplierRepo.findAll()          } returns emptyList()
-        every { costCenterRepo.findAll()        } returns emptyList()
-        every { categoryRepo.findAll()          } returns emptyList()
+        every { service.listAll()                    } returns emptyList()
+        every { service.applyListFilter(any())       } just Runs
+        every { accountRepo.findAll()                } returns emptyList()
+        every { supplierRepo.findAll()               } returns emptyList()
+        every { costCenterRepo.findAll()             } returns emptyList()
+        every { categoryRepo.findAll()               } returns emptyList()
+        every { counterpartyResolver.resolve(any())  } returns CounterpartyMap.EMPTY
 
         Dispatchers.setMain(UnconfinedTestDispatcher())
     }
@@ -70,7 +75,8 @@ class TransactionPanelStateTest {
         costCenterRepository = costCenterRepo,
         categoryRepository   = categoryRepo,
         sessionManager       = sessionManager,
-        budgetRepository     = budgetRepo
+        budgetRepository     = budgetRepo,
+        counterpartyResolver = counterpartyResolver
     )
 
     @Test

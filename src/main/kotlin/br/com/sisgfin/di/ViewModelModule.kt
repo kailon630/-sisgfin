@@ -33,13 +33,13 @@ val viewModelModule = module {
     factory { FinancialAccountViewModel(get()) }
     factory { CostCenterViewModel(get()) }
     factory { ExpenseCategoryViewModel(get()) }
-    factory { TransactionsViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    factory { TransactionsViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     factory { ContractViewModel(get(), get()) }
     factory { RecurringViewModel(get(), get(), get(), get(), get(), get()) }
     factory { BalancePanelViewModel(get(), get(), get()) }
     factory { StatementViewModel(get(), get(), get(), get(), get()) }
     factory { BudgetViewModel(get(), get(), get()) }
-    factory { ReportsViewModel(get(), get(), get(), get(), get(), get(), get()) }
+    factory { ReportsViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
     factory { ProjectViewModel(get(), get()) }
     factory { CashFlowViewModel(get(), get(), get()) }
     factory { OfxImportViewModel(get(), get(), get(), get(), get(), get(), get()) }

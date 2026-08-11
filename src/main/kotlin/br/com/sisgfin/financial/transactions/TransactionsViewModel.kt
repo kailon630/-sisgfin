@@ -47,7 +47,8 @@ class TransactionsViewModel(
     private val budgetRepository: BudgetItemRepository,
     private val recurrenceTemplateService: RecurrenceTemplateService? = null,
     private val contractService: ContractService? = null,
-    private val projectRepository: ProjectRepository? = null
+    private val projectRepository: ProjectRepository? = null,
+    private val counterpartyResolver: CounterpartyResolver
 ) : BaseCrudViewModel<Transaction>(
     operations = service,
     emptyFactory = {
@@ -96,6 +97,9 @@ class TransactionsViewModel(
     private val _projects = MutableStateFlow<List<Project>>(emptyList())
     val projects: StateFlow<List<Project>> = _projects.asStateFlow()
 
+    private val _counterparties = MutableStateFlow(CounterpartyMap.EMPTY)
+    val counterparties: StateFlow<CounterpartyMap> = _counterparties.asStateFlow()
+
     private val _contractWouldExceed = MutableStateFlow(false)
     val contractWouldExceed: StateFlow<Boolean> = _contractWouldExceed.asStateFlow()
 
@@ -107,6 +111,17 @@ class TransactionsViewModel(
         // Sincroniza o serviço com o filtro padrão antes que BaseCrudViewModel execute o primeiro load()
         service.applyListFilter(TransactionListFilter.ActionRequired)
         loadReferenceData()
+        var lastItems: List<Transaction>? = null
+        viewModelScope.launch {
+            crudState.collect { state ->
+                if (!state.isLoading && state.items !== lastItems) {
+                    lastItems = state.items
+                    _counterparties.value = withContext(Dispatchers.IO) {
+                        counterpartyResolver.resolve(state.items)
+                    }
+                }
+            }
+        }
     }
 
     fun openNewExpense() = openWithItem(emptyTransaction(TransactionType.EXPENSE))
@@ -284,11 +299,10 @@ class TransactionsViewModel(
                         ?: uiState.value.items.find { it.id == id }
                         ?: return@withContext null
                     val accs  = _accounts.value
-                    val sups  = _suppliers.value
                     val cats  = _categories.value
                     val ccs   = _costCenters.value
 
-                    val supplierName  = tx.supplierId?.let { sups.find { s -> s.id == it }?.name }
+                    val supplierName = counterpartyResolver.resolve(listOf(tx)).nameFor(tx)
                     val accountName   = accs.find { it.id == tx.accountId }?.name ?: "#${tx.accountId}"
                     val cat           = cats.find { it.id == tx.categoryId }
                     val costCenter    = ccs.find { it.id == tx.costCenterId }
