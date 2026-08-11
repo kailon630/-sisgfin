@@ -1,12 +1,13 @@
 package br.com.sisgfin.core.ui.panel
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -24,6 +25,7 @@ fun BaseCrudPanel(
     isDirty: Boolean = false,
     errorMessage: String? = null,
     saveLabel: String = "Salvar Alterações",
+    scrollResetKey: Any? = null,
     onSave: (() -> Unit)? = null,
     onCancel: (() -> Unit)? = null,
     showFooter: Boolean = onSave != null,
@@ -85,9 +87,10 @@ fun BaseCrudPanel(
 
                 Spacer(Modifier.height(if (isWide) 32.dp else 24.dp))
 
+                val scrollState = remember(scrollResetKey) { ScrollState(0) }
                 Column(
                     verticalArrangement = Arrangement.spacedBy(24.dp),
-                    modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                    modifier = Modifier.weight(1f).verticalScroll(scrollState),
                     content = content
                 )
 

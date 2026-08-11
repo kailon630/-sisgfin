@@ -114,9 +114,13 @@ fun TransactionDetailsPanel(
 
     BaseCrudPanel(
         title = if (item.id == 0) "Nova Transação" else item.description,
-        subtitle = if (item.installmentTotal != null)
-            "Parcela ${item.installmentCurrent}/${item.installmentTotal}"
-        else "Resumo financeiro e ciclo operacional",
+        subtitle = when {
+            item.id == 0 -> "Novo lançamento"
+            item.installmentTotal != null -> "Parcela ${item.installmentCurrent}/${item.installmentTotal}"
+            else -> "Resumo financeiro e ciclo operacional"
+        },
+        saveLabel = if (item.id == 0) "Criar Lançamento" else "Salvar Alterações",
+        scrollResetKey = item.id,
         onClose = onClose,
         isLoading = uiState.isLoading,
         errorMessage = uiState.errorMessage ?: operationError,
@@ -162,28 +166,30 @@ fun TransactionDetailsPanel(
             TransactionTypeLabel(item.type)
         }
 
-        // Summary (read-only)
-        DetailSection("Resumo") {
-            SummaryRow("Valor total", MoneyFormatter.format(item.amount))
-            item.paidAmount?.let { SummaryRow("Valor pago", MoneyFormatter.format(it)) }
-            item.interestAmount?.let { SummaryRow("Juros", MoneyFormatter.format(it)) }
-            item.fineAmount?.let { SummaryRow("Multa", MoneyFormatter.format(it)) }
-            SummaryRow("Emissão", item.issueDate.format(dateFormatter))
-            SummaryRow("Vencimento", item.dueDate.format(dateFormatter))
-            item.paymentDate?.let { SummaryRow("Pagamento", it.format(dateFormatter)) }
-            SummaryRow("Conta", accountName)
-            supplierName?.let { SummaryRow("Fornecedor", it) }
-            costCenterName?.let { SummaryRow("Centro de Custo", it) }
-            projectName?.let { SummaryRow("Projeto", it) }
-            categoryName?.let { SummaryRow("Categoria", it) }
-            item.documentType?.let { dt ->
-                SummaryRow("Documento", "$dt ${item.documentNumber ?: ""}".trim())
-            }
-            if (item.installmentTotal != null) {
-                SummaryRow(
-                    "Parcela",
-                    "${item.installmentCurrent}/${item.installmentTotal}"
-                )
+        // Summary (read-only) — não existe para lançamentos ainda não salvos
+        if (item.id != 0) {
+            DetailSection("Resumo") {
+                SummaryRow("Valor total", MoneyFormatter.format(item.amount))
+                item.paidAmount?.let { SummaryRow("Valor pago", MoneyFormatter.format(it)) }
+                item.interestAmount?.let { SummaryRow("Juros", MoneyFormatter.format(it)) }
+                item.fineAmount?.let { SummaryRow("Multa", MoneyFormatter.format(it)) }
+                SummaryRow("Emissão", item.issueDate.format(dateFormatter))
+                SummaryRow("Vencimento", item.dueDate.format(dateFormatter))
+                item.paymentDate?.let { SummaryRow("Pagamento", it.format(dateFormatter)) }
+                SummaryRow("Conta", accountName)
+                supplierName?.let { SummaryRow("Fornecedor", it) }
+                costCenterName?.let { SummaryRow("Centro de Custo", it) }
+                projectName?.let { SummaryRow("Projeto", it) }
+                categoryName?.let { SummaryRow("Categoria", it) }
+                item.documentType?.let { dt ->
+                    SummaryRow("Documento", "$dt ${item.documentNumber ?: ""}".trim())
+                }
+                if (item.installmentTotal != null) {
+                    SummaryRow(
+                        "Parcela",
+                        "${item.installmentCurrent}/${item.installmentTotal}"
+                    )
+                }
             }
         }
 
