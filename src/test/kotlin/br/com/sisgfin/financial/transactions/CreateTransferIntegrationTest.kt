@@ -220,4 +220,34 @@ class CreateTransferIntegrationTest {
         assertEquals(7, captured[1].costCenterId)
         assertEquals(3, captured[1].categoryId)
     }
+
+    // ── CARACTERIZAÇÃO — atomicidade ──────────────────────────────────────────
+
+    @Test
+    fun `CARACTERIZACAO C-15 createTransfer nao e atomico perna de origem fica orfa`() {
+        // CARACTERIZAÇÃO — comportamento INCORRETO, mantido de propósito.
+        // Não existe transaction{} do Exposed envolvendo os dois inserts.
+        // Se o segundo insert falhar, a perna de origem já está gravada no banco
+        // sem par — dinheiro sai da conta de origem sem entra na de destino.
+        // Corrigir em C-15: envolver os dois inserts em transaction{} do Exposed.
+        // Quando este teste QUEBRAR (nenhuma exceção ou eventually rollback), é sinal de sucesso.
+        //
+        // Nota técnica: MockK conta invocações mesmo quando lançam exceção. Por isso
+        // usamos match { accountId == N } para distinguir cada perna individualmente.
+        val accountRepo = mockk<FinancialAccountRepository>()
+        every { accountRepo.findById(any()) } returns account(1)
+        val repo = mockk<TransactionRepository>(relaxed = true)
+        // primeiro insert (origem) sucede; segundo (destino) lança
+        every { repo.insert(any()) } returns 10 andThenThrows RuntimeException("DB error na segunda perna")
+        val service = makeService(repo = repo, accountRepo = accountRepo)
+
+        assertThrows<RuntimeException> {
+            service.createTransfer(1, 2, Money.fromString("500.00"), transferDate, "TED")
+        }
+
+        // perna de origem (accountId=1, sem parentId) chegou ao insert — em banco real já persistida
+        verify(exactly = 1) { repo.insert(match { it.accountId == 1 && it.parentTransactionId == null }) }
+        // perna de destino foi tentada e causou a exceção — não há rollback da origem
+        verify(exactly = 1) { repo.insert(match { it.accountId == 2 }) }
+    }
 }

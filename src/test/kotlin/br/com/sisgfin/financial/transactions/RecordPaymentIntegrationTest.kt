@@ -339,4 +339,32 @@ class RecordPaymentIntegrationTest {
         // Os R$50 de juros da 1ª baixa desaparecem silenciosamente.
         assertEquals(0, Money.fromString("1000.00").compareTo(updated.amount))
     }
+
+    // ── CARACTERIZAÇÃO — cascade de transferência ─────────────────────────────
+
+    @Test
+    fun `CARACTERIZACAO C-01 recordPayment em perna TRANSFER nao cascateia para a irma`() {
+        // CARACTERIZAÇÃO — comportamento INCORRETO, mantido de propósito.
+        // C-01: quitar a perna de origem de uma transferência NÃO propaga o status
+        // PAID para a perna de destino. A perna destino fica PENDING indefinidamente.
+        // Decisão D5 pendente — ver C00_C01_TRANSFERENCIA_E_SPEC.md seção B.4.
+        // Será resolvido em C-09. Quando este teste QUEBRAR, é sinal de sucesso:
+        // inverta a asserção de verify(exactly = 0) para verify(exactly = 1).
+        val sourceTx = expense(id = 1).copy(type = TransactionType.TRANSFER)
+        val sisterTx = expense(id = 2).copy(type = TransactionType.TRANSFER, accountId = 2)
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(1) } returns sourceTx
+        every { repo.findById(2) } returns sisterTx
+        val slot = slot<Transaction>()
+        every { repo.update(capture(slot)) } just Runs
+        val service = makeService(repo)
+
+        service.recordPayment(1, paymentDate, Money.fromString("1000.00"))
+
+        // source foi quitada: exatamente um update
+        verify(exactly = 1) { repo.update(any()) }
+        assertEquals(TransactionStatus.PAID, slot.captured.status)
+        // irmã NUNCA foi consultada nem atualizada — ausência de cascade
+        verify(exactly = 0) { repo.findById(2) }
+    }
 }

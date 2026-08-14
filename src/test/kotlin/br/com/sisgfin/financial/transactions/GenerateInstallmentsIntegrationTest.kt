@@ -315,4 +315,33 @@ class GenerateInstallmentsIntegrationTest {
         assertEquals(0, Money.fromString("100.00").compareTo(soma),
             "Soma das parcelas deve igualar o total original: esperado 100.00, obtido $soma")
     }
+
+    // ── CARACTERIZAÇÃO — bypass de validateForSave ────────────────────────────
+
+    @Test
+    fun `CARACTERIZACAO S-04 parcelas filhas contornam validateForSave`() {
+        // CARACTERIZAÇÃO — comportamento INCORRETO, mantido de propósito.
+        // S-04: generateInstallments() chama repository.insert(child) diretamente,
+        // sem passar por TransactionValidator.validateForSave. Apenas o pai é validado.
+        // Demostrado via mockkObject: com 3 parcelas, validateForSave é chamado 1x (pai),
+        // não 3x (pai + 2 filhos). Corrigir em S-04.
+        // Quando este teste QUEBRAR (verify exactly=3 passar), é sinal de sucesso.
+        val repo = mockk<TransactionRepository>()
+        val accountRepo = mockk<FinancialAccountRepository>()
+        every { accountRepo.findById(1) } returns FinancialAccount(id = 1, name = "Caixa")
+        every { repo.insert(any()) } returnsMany listOf(10, 11, 12)
+
+        mockkObject(TransactionValidator)
+        every { TransactionValidator.validateForSave(any(), any()) } just Runs
+
+        try {
+            val service = makeService(repo, accountRepo)
+            service.create(templateTx(installmentTotal = 3, amount = "300.00"))
+
+            // validateForSave chamado 1x (pai) — os 2 filhos passam direto para insert
+            verify(exactly = 1) { TransactionValidator.validateForSave(any(), any()) }
+        } finally {
+            unmockkObject(TransactionValidator)
+        }
+    }
 }
