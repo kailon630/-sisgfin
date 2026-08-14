@@ -148,13 +148,24 @@ class ReportsViewModel(
                         val value = tx.paidAmount ?: tx.amount
                         when (tx.type) {
                             TransactionType.INCOME,
-                            TransactionType.REVERSAL,
                             TransactionType.ADJUSTMENT ->
                                 incomeByCategory[tx.categoryId] =
                                     (incomeByCategory[tx.categoryId] ?: Money.ZERO) + value
                             TransactionType.EXPENSE ->
                                 expenseByCategory[tx.categoryId] =
                                     (expenseByCategory[tx.categoryId] ?: Money.ZERO) + value
+                            // C-11: REVERSAL abate a categoria de origem via reversed_type.
+                            TransactionType.REVERSAL -> when (tx.reversedType) {
+                                TransactionType.EXPENSE ->
+                                    expenseByCategory[tx.categoryId] =
+                                        (expenseByCategory[tx.categoryId] ?: Money.ZERO) - value
+                                TransactionType.INCOME ->
+                                    incomeByCategory[tx.categoryId] =
+                                        (incomeByCategory[tx.categoryId] ?: Money.ZERO) - value
+                                else ->  // órfão sem reversed_type: conservador, classifica como receita
+                                    incomeByCategory[tx.categoryId] =
+                                        (incomeByCategory[tx.categoryId] ?: Money.ZERO) + value
+                            }
                             else -> {}
                         }
                     }

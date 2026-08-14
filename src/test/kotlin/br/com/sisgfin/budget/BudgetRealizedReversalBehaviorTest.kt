@@ -6,55 +6,110 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 
 /**
- * R7.1 — documenta o comportamento ATUAL do realizado orçamentário após estorno.
- * Não é correção: `sumRealized` soma amount de todo PAID sem filtrar tipo,
- * e o estorno copia CC/categoria com amount positivo → realizado dobra.
+ * C-11 — garante que `sumRealized` neteia estornos de despesa corretamente.
+ *
+ * Fórmula corrigida: soma apenas EXPENSE; subtrai REVERSAL cujo reversedType=EXPENSE.
+ * REVERSAL órfão (reversedType=null) não subtrai — conservador, sem crash.
+ * INCOME e REVERSAL de INCOME não afetam o realizado de despesa.
+ *
+ * Os dois primeiros testes foram invertidos em C-11: afirmavam o comportamento
+ * bugado (realizado=2000 após estorno, REVERSAL como receita no Demonstrativo).
+ * Agora afirmam o comportamento correto.
  */
 class BudgetRealizedReversalBehaviorTest {
 
     /**
-     * Espelha [BudgetItemRepository.sumRealized]: soma `amount` de linhas
-     * PAID + ativas com mesmo CC×categoria (sem filtro de type).
+     * Espelha a lógica corrigida de [BudgetItemRepository.sumRealized]:
+     * soma EXPENSE, subtrai REVERSAL(EXPENSE), ignora o resto.
      */
-    private fun sumRealized(lines: List<Pair<TransactionType, Money>>): Money =
-        lines.fold(Money.ZERO) { acc, (_, amount) -> acc + amount }
+    private fun sumRealized(lines: List<Triple<TransactionType, TransactionType?, Money>>): Money =
+        lines.fold(Money.ZERO) { acc, (type, reversedType, amount) ->
+            when {
+                type == TransactionType.EXPENSE -> acc + amount
+                type == TransactionType.REVERSAL && reversedType == TransactionType.EXPENSE -> acc - amount
+                else -> acc
+            }
+        }
+
+    // ── Testes invertidos de R7 ───────────────────────────────────────────────
 
     @Test
-    fun `R7 EXPENSE 1000 PAID e REVERSAL 1000 na mesma rubrica resulta em realizado 2000`() {
-        // Após pagamento: só a despesa
-        val afterPay = sumRealized(
-            listOf(TransactionType.EXPENSE to Money.fromDouble(1_000.0))
-        )
-        assertEquals("1000.00", afterPay.toString())
-
-        // Após estorno: original permanece PAID + REVERSAL PAID (mesmo CC/categoria)
-        val afterRev = sumRealized(
-            listOf(
-                TransactionType.EXPENSE to Money.fromDouble(1_000.0),
-                TransactionType.REVERSAL to Money.fromDouble(1_000.0)
-            )
-        )
-        assertEquals("2000.00", afterRev.toString())
-        // Comportamento desejável seria 0; hoje é 2000 (bug documentado, não corrigido)
+    fun `EXPENSE 1000 PAID estornado integralmente resulta em realizado zero`() {
+        // Antes da correção C-11 este teste assertava "2000.00" (comportamento bugado).
+        val realized = sumRealized(listOf(
+            Triple(TransactionType.EXPENSE,  null,                    Money.fromDouble(1_000.0)),
+            Triple(TransactionType.REVERSAL, TransactionType.EXPENSE, Money.fromDouble(1_000.0))
+        ))
+        assertEquals("0.00", realized.toString())
     }
 
     @Test
-    fun `R7 Demonstrativo trata REVERSAL como receita nao como reducao de despesa`() {
-        // Espelha ReportsViewModel.applyDemonstrativoFilter
-        var income = Money.ZERO
+    fun `Demonstrativo REVERSAL de EXPENSE reduz despesa nao conta como receita`() {
+        // Antes da correção C-11 este teste assertava expense=1000, income=1000.
+        var income  = Money.ZERO
         var expense = Money.ZERO
-        fun classify(type: TransactionType, value: Money) {
-            when (type) {
-                TransactionType.INCOME, TransactionType.REVERSAL, TransactionType.ADJUSTMENT ->
+        fun classify(type: TransactionType, reversedType: TransactionType?, value: Money) {
+            when {
+                type == TransactionType.INCOME || type == TransactionType.ADJUSTMENT ->
                     income += value
-                TransactionType.EXPENSE -> expense += value
-                else -> {}
+                type == TransactionType.EXPENSE ->
+                    expense += value
+                type == TransactionType.REVERSAL && reversedType == TransactionType.EXPENSE ->
+                    expense -= value
+                type == TransactionType.REVERSAL && reversedType == TransactionType.INCOME ->
+                    income -= value
+                type == TransactionType.REVERSAL ->  // órfão
+                    income += value
             }
         }
-        classify(TransactionType.EXPENSE, Money.fromDouble(1_000.0))
-        classify(TransactionType.REVERSAL, Money.fromDouble(1_000.0))
-        assertEquals("1000.00", expense.toString())
-        assertEquals("1000.00", income.toString())
+        classify(TransactionType.EXPENSE, null, Money.fromDouble(1_000.0))
+        classify(TransactionType.REVERSAL, TransactionType.EXPENSE, Money.fromDouble(1_000.0))
+        assertEquals("0.00", expense.toString())
+        assertEquals("0.00", income.toString())
         assertEquals("0.00", (income - expense).toString())
+    }
+
+    // ── Novos cenários C-11 (2.3) ─────────────────────────────────────────────
+
+    @Test
+    fun `EXPENSE 1000 PAID sem estorno resulta em realizado 1000`() {
+        val realized = sumRealized(listOf(
+            Triple(TransactionType.EXPENSE, null, Money.fromDouble(1_000.0))
+        ))
+        assertEquals("1000.00", realized.toString())
+    }
+
+    @Test
+    fun `EXPENSE 1000 PAID com REVERSAL parcial 600 resulta em realizado 400`() {
+        val realized = sumRealized(listOf(
+            Triple(TransactionType.EXPENSE,  null,                    Money.fromDouble(1_000.0)),
+            Triple(TransactionType.REVERSAL, TransactionType.EXPENSE, Money.fromDouble(600.0))
+        ))
+        assertEquals("400.00", realized.toString())
+    }
+
+    @Test
+    fun `INCOME PAID e seu REVERSAL nao afetam realizado de despesa`() {
+        val realized = sumRealized(listOf(
+            Triple(TransactionType.INCOME,   null,                   Money.fromDouble(500.0)),
+            Triple(TransactionType.REVERSAL, TransactionType.INCOME, Money.fromDouble(500.0))
+        ))
+        assertEquals("0.00", realized.toString())
+    }
+
+    @Test
+    fun `REVERSAL orfao sem reversed_type nao subtrai do realizado`() {
+        val realized = sumRealized(listOf(
+            Triple(TransactionType.EXPENSE,  null, Money.fromDouble(1_000.0)),
+            Triple(TransactionType.REVERSAL, null, Money.fromDouble(1_000.0))
+        ))
+        // Orfão é ignorado: não subtrai (conservador), não causa crash
+        assertEquals("1000.00", realized.toString())
+    }
+
+    @Test
+    fun `rubrica sem lancamento tem realizado zero`() {
+        val realized = sumRealized(emptyList())
+        assertEquals("0.00", realized.toString())
     }
 }

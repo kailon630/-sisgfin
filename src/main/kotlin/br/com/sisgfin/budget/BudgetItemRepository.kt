@@ -5,6 +5,7 @@ import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.toMoney
 import br.com.sisgfin.financial.transactions.FinancialTransactionsTable
 import br.com.sisgfin.financial.transactions.TransactionStatus
+import br.com.sisgfin.financial.transactions.TransactionType
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.javatime.year
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -102,37 +103,64 @@ class BudgetItemRepository : MutableEntityRepository<BudgetItem> {
             .firstOrNull()
     }
 
-    // Balancete: realizado no mês específico (para filtro mensal)
+    // Balancete: realizado no mês específico (para filtro mensal).
+    // C-11: soma somente EXPENSE; subtrai REVERSAL cujo reversed_type=EXPENSE.
     fun sumRealizedMonth(costCenterId: Int, categoryId: Int, year: Int, month: Int): Money = transaction {
-        val from = java.time.LocalDate.of(year, month, 1).atStartOfDay()
-        val to   = java.time.LocalDate.of(year, month, 1).plusMonths(1).atStartOfDay()
+        val from    = java.time.LocalDate.of(year, month, 1).atStartOfDay()
+        val to      = java.time.LocalDate.of(year, month, 1).plusMonths(1).atStartOfDay()
         val sumExpr = FinancialTransactionsTable.amount.sum()
-        FinancialTransactionsTable
-            .select(sumExpr)
+        val expenses = FinancialTransactionsTable.select(sumExpr)
             .where {
                 (FinancialTransactionsTable.costCenterId eq costCenterId) and
-                (FinancialTransactionsTable.categoryId eq categoryId) and
-                (FinancialTransactionsTable.status eq TransactionStatus.PAID.name) and
-                (FinancialTransactionsTable.isActive eq true) and
+                (FinancialTransactionsTable.categoryId  eq categoryId) and
+                (FinancialTransactionsTable.status      eq TransactionStatus.PAID.name) and
+                (FinancialTransactionsTable.isActive    eq true) and
                 (FinancialTransactionsTable.paymentDate greaterEq from) and
-                (FinancialTransactionsTable.paymentDate less to)
+                (FinancialTransactionsTable.paymentDate less to) and
+                (FinancialTransactionsTable.type        eq TransactionType.EXPENSE.name)
             }
             .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
+        val reversals = FinancialTransactionsTable.select(sumExpr)
+            .where {
+                (FinancialTransactionsTable.costCenterId eq costCenterId) and
+                (FinancialTransactionsTable.categoryId  eq categoryId) and
+                (FinancialTransactionsTable.status      eq TransactionStatus.PAID.name) and
+                (FinancialTransactionsTable.isActive    eq true) and
+                (FinancialTransactionsTable.paymentDate greaterEq from) and
+                (FinancialTransactionsTable.paymentDate less to) and
+                (FinancialTransactionsTable.type        eq TransactionType.REVERSAL.name) and
+                (FinancialTransactionsTable.reversedType eq TransactionType.EXPENSE.name)
+            }
+            .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
+        expenses - reversals
     }
 
-    // RN-24: soma dos lançamentos PAID vinculados ao projeto × categoria no ano
+    // RN-24: soma dos lançamentos PAID vinculados ao CC × categoria no ano.
+    // C-11: soma somente EXPENSE; subtrai REVERSAL cujo reversed_type=EXPENSE.
     fun sumRealized(costCenterId: Int, categoryId: Int, year: Int): Money = transaction {
         val sumExpr = FinancialTransactionsTable.amount.sum()
-        FinancialTransactionsTable
-            .select(sumExpr)
+        val expenses = FinancialTransactionsTable.select(sumExpr)
             .where {
                 (FinancialTransactionsTable.costCenterId eq costCenterId) and
-                (FinancialTransactionsTable.categoryId eq categoryId) and
-                (FinancialTransactionsTable.status eq TransactionStatus.PAID.name) and
-                (FinancialTransactionsTable.isActive eq true) and
-                (FinancialTransactionsTable.paymentDate.year() eq year)
+                (FinancialTransactionsTable.categoryId  eq categoryId) and
+                (FinancialTransactionsTable.status      eq TransactionStatus.PAID.name) and
+                (FinancialTransactionsTable.isActive    eq true) and
+                (FinancialTransactionsTable.paymentDate.year() eq year) and
+                (FinancialTransactionsTable.type        eq TransactionType.EXPENSE.name)
             }
             .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
+        val reversals = FinancialTransactionsTable.select(sumExpr)
+            .where {
+                (FinancialTransactionsTable.costCenterId eq costCenterId) and
+                (FinancialTransactionsTable.categoryId  eq categoryId) and
+                (FinancialTransactionsTable.status      eq TransactionStatus.PAID.name) and
+                (FinancialTransactionsTable.isActive    eq true) and
+                (FinancialTransactionsTable.paymentDate.year() eq year) and
+                (FinancialTransactionsTable.type        eq TransactionType.REVERSAL.name) and
+                (FinancialTransactionsTable.reversedType eq TransactionType.EXPENSE.name)
+            }
+            .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
+        expenses - reversals
     }
 
     private fun rowToItem(row: ResultRow) = BudgetItem(
