@@ -1,0 +1,342 @@
+package br.com.sisgfin.financial.transactions
+
+import br.com.sisgfin.AuditRepository
+import br.com.sisgfin.CostCenterRepository
+import br.com.sisgfin.FinancialAccountRepository
+import br.com.sisgfin.SessionManager
+import br.com.sisgfin.SupplierRepository
+import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.transactions.timeline.TransactionTimelineRepository
+import io.mockk.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
+import java.time.LocalDateTime
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+/**
+ * C-14 / Bloco 1 — caracterização de TransactionService.recordPayment().
+ *
+ * Todos os testes exercitam o service REAL com repositórios mockados.
+ * Dois testes CARACTERIZACAO documentam comportamento incorreto que será
+ * corrigido no épico E2. Quando quebrarem, é sinal de sucesso — inverta as
+ * asserções conforme comentário em cada teste.
+ */
+class RecordPaymentIntegrationTest {
+
+    private val paymentDate: LocalDateTime = LocalDateTime.of(2026, 8, 14, 10, 0)
+
+    private fun makeService(
+        repo: TransactionRepository = mockk(relaxed = true),
+        withPermission: Boolean = true
+    ): TransactionService {
+        val session = mockk<SessionManager>()
+        every { session.currentUser } returns MutableStateFlow(null)
+        every { session.hasPermission(any()) } returns withPermission
+        return TransactionService(
+            repository           = repo,
+            accountRepository    = mockk(relaxed = true),
+            supplierRepository   = mockk(relaxed = true),
+            costCenterRepository = mockk(relaxed = true),
+            auditRepository      = mockk(relaxed = true),
+            timelineRepository   = mockk(relaxed = true),
+            sessionManager       = session
+        )
+    }
+
+    private fun expense(
+        id: Int = 1,
+        amount: String = "1000.00",
+        status: TransactionStatus = TransactionStatus.PENDING,
+        paidAmount: String? = null,
+        interestAmount: String? = null,
+        fineAmount: String? = null
+    ) = Transaction(
+        id             = id,
+        type           = TransactionType.EXPENSE,
+        status         = status,
+        description    = "Despesa teste",
+        amount         = Money.fromString(amount),
+        issueDate      = LocalDateTime.of(2026, 8, 1, 0, 0),
+        dueDate        = LocalDateTime.of(2026, 8, 31, 0, 0),
+        accountId      = 1,
+        paidAmount     = paidAmount?.let { Money.fromString(it) },
+        interestAmount = interestAmount?.let { Money.fromString(it) },
+        fineAmount     = fineAmount?.let { Money.fromString(it) }
+    )
+
+    // ── pagamento integral ────────────────────────────────────────────────────
+
+    @Test
+    fun `recordPayment integral EXPENSE PENDING - status vira PAID paidAmount e paymentDate gravados`() {
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(1) } returns expense()
+        val slot = slot<Transaction>()
+        every { repo.update(capture(slot)) } just Runs
+        val service = makeService(repo)
+
+        service.recordPayment(1, paymentDate, Money.fromString("1000.00"))
+
+        val updated = slot.captured
+        assertEquals(TransactionStatus.PAID, updated.status)
+        assertEquals(0, Money.fromString("1000.00").compareTo(updated.paidAmount!!))
+        assertEquals(paymentDate, updated.paymentDate)
+    }
+
+    @Test
+    fun `recordPayment integral INCOME PENDING - status vira PAID`() {
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(1) } returns expense().copy(type = TransactionType.INCOME)
+        val slot = slot<Transaction>()
+        every { repo.update(capture(slot)) } just Runs
+        val service = makeService(repo)
+
+        service.recordPayment(1, paymentDate, Money.fromString("1000.00"))
+
+        assertEquals(TransactionStatus.PAID, slot.captured.status)
+    }
+
+    // ── pagamento parcial ─────────────────────────────────────────────────────
+
+    @Test
+    fun `recordPayment parcial - status vira PARTIAL paidAmount e paymentDate gravados`() {
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(1) } returns expense()
+        val slot = slot<Transaction>()
+        every { repo.update(capture(slot)) } just Runs
+        val service = makeService(repo)
+
+        service.recordPayment(1, paymentDate, Money.fromString("400.00"))
+
+        val updated = slot.captured
+        assertEquals(TransactionStatus.PARTIAL, updated.status)
+        assertEquals(0, Money.fromString("400.00").compareTo(updated.paidAmount!!))
+        assertEquals(paymentDate, updated.paymentDate)
+    }
+
+    // ── OVERDUE ───────────────────────────────────────────────────────────────
+
+    @Test
+    fun `recordPayment integral de OVERDUE - status vira PAID`() {
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(1) } returns expense(status = TransactionStatus.OVERDUE)
+        val slot = slot<Transaction>()
+        every { repo.update(capture(slot)) } just Runs
+        val service = makeService(repo)
+
+        service.recordPayment(1, paymentDate, Money.fromString("1000.00"))
+
+        assertEquals(TransactionStatus.PAID, slot.captured.status)
+    }
+
+    // ── segunda baixa em PARTIAL ──────────────────────────────────────────────
+
+    @Test
+    fun `segunda baixa em PARTIAL quita titulo - status vira PAID e paidAmount acumulado`() {
+        // PARTIAL: 400 amortizados, outstanding = 600
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(1) } returns expense(status = TransactionStatus.PARTIAL, paidAmount = "400.00")
+        val slot = slot<Transaction>()
+        every { repo.update(capture(slot)) } just Runs
+        val service = makeService(repo)
+
+        service.recordPayment(1, paymentDate, Money.fromString("600.00"))
+
+        val updated = slot.captured
+        assertEquals(TransactionStatus.PAID, updated.status)
+        assertEquals(0, Money.fromString("1000.00").compareTo(updated.paidAmount!!))
+    }
+
+    // ── validações de pré-condição ────────────────────────────────────────────
+
+    @Test
+    fun `recordPayment em titulo PAID lanca IllegalStateException`() {
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(1) } returns expense(status = TransactionStatus.PAID, paidAmount = "1000.00")
+        val service = makeService(repo)
+
+        assertThrows<IllegalStateException> {
+            service.recordPayment(1, paymentDate, Money.fromString("1000.00"))
+        }
+    }
+
+    @Test
+    fun `recordPayment em titulo CANCELED lanca IllegalStateException`() {
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(1) } returns expense(status = TransactionStatus.CANCELED)
+        val service = makeService(repo)
+
+        assertThrows<IllegalStateException> {
+            service.recordPayment(1, paymentDate, Money.fromString("1000.00"))
+        }
+    }
+
+    @Test
+    fun `recordPayment com valor acima do outstanding lanca IllegalArgumentException`() {
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(1) } returns expense()
+        val service = makeService(repo)
+
+        assertThrows<IllegalArgumentException> {
+            service.recordPayment(1, paymentDate, Money.fromString("1001.00"))
+        }
+    }
+
+    @Test
+    fun `recordPayment com valor zero lanca IllegalArgumentException`() {
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(1) } returns expense()
+        val service = makeService(repo)
+
+        assertThrows<IllegalArgumentException> {
+            service.recordPayment(1, paymentDate, Money.ZERO)
+        }
+    }
+
+    @Test
+    fun `recordPayment com data de pagamento anterior a emissao lanca IllegalArgumentException`() {
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(1) } returns expense()
+        val service = makeService(repo)
+
+        assertThrows<IllegalArgumentException> {
+            service.recordPayment(1, LocalDateTime.of(2025, 1, 1, 0, 0), Money.fromString("1000.00"))
+        }
+    }
+
+    @Test
+    fun `recordPayment sem permissao lanca SecurityException`() {
+        val service = makeService(withPermission = false)
+
+        assertThrows<SecurityException> {
+            service.recordPayment(1, paymentDate, Money.fromString("1000.00"))
+        }
+    }
+
+    @Test
+    fun `recordPayment para transacao inexistente lanca IllegalArgumentException`() {
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(99) } returns null
+        val service = makeService(repo)
+
+        val ex = assertThrows<IllegalArgumentException> {
+            service.recordPayment(99, paymentDate, Money.fromString("500.00"))
+        }
+        assertTrue(ex.message!!.contains("não encontrada"))
+    }
+
+    // ── encargos (comportamento de armazenamento) ─────────────────────────────
+
+    @Test
+    fun `recordPayment com juros - paidAmount armazena principal mais juros e interestAmount isolado`() {
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(1) } returns expense()
+        val slot = slot<Transaction>()
+        every { repo.update(capture(slot)) } just Runs
+        val service = makeService(repo)
+
+        service.recordPayment(1, paymentDate, Money.fromString("1000.00"),
+            interestAmount = Money.fromString("50.00"))
+
+        val updated = slot.captured
+        assertEquals(0, Money.fromString("1050.00").compareTo(updated.paidAmount!!))
+        assertEquals(0, Money.fromString("50.00").compareTo(updated.interestAmount!!))
+        assertEquals(0, Money.fromString("1000.00").compareTo(updated.amount))
+    }
+
+    @Test
+    fun `recordPayment com multa - paidAmount armazena principal mais multa e fineAmount isolado`() {
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(1) } returns expense()
+        val slot = slot<Transaction>()
+        every { repo.update(capture(slot)) } just Runs
+        val service = makeService(repo)
+
+        service.recordPayment(1, paymentDate, Money.fromString("1000.00"),
+            fineAmount = Money.fromString("30.00"))
+
+        val updated = slot.captured
+        assertEquals(0, Money.fromString("1030.00").compareTo(updated.paidAmount!!))
+        assertEquals(0, Money.fromString("30.00").compareTo(updated.fineAmount!!))
+    }
+
+    @Test
+    fun `recordPayment com juros e multa - paidAmount acumula os tres componentes`() {
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(1) } returns expense()
+        val slot = slot<Transaction>()
+        every { repo.update(capture(slot)) } just Runs
+        val service = makeService(repo)
+
+        service.recordPayment(1, paymentDate, Money.fromString("1000.00"),
+            interestAmount = Money.fromString("50.00"),
+            fineAmount     = Money.fromString("20.00"))
+
+        val updated = slot.captured
+        // paidAmount = 1000 + 50 + 20 = 1070
+        assertEquals(0, Money.fromString("1070.00").compareTo(updated.paidAmount!!))
+        assertEquals(0, Money.fromString("50.00").compareTo(updated.interestAmount!!))
+        assertEquals(0, Money.fromString("20.00").compareTo(updated.fineAmount!!))
+    }
+
+    // ── CARACTERIZAÇÃO — comportamentos incorretos conhecidos ─────────────────
+
+    @Test
+    fun `CARACTERIZACAO P0-5 recordPayment com juros nao soma encargos ao saldo`() {
+        // CARACTERIZAÇÃO — comportamento INCORRETO, mantido de propósito.
+        // P0-5: sumPaid() agrega `amount`, não `paidAmount`; juros e multa pagos
+        // nunca saem do saldo. amount permanece 1000 enquanto paidAmount = 1050.
+        // calculateBalance usa SUM(amount) = 1000 — R$50 de juros são invisíveis.
+        // Será corrigido no E2 (C-06 / calculateBalance sobre baixas).
+        // Quando este teste QUEBRAR, é sinal de sucesso: inverta a asserção sobre amount.
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(1) } returns expense()
+        val slot = slot<Transaction>()
+        every { repo.update(capture(slot)) } just Runs
+        val service = makeService(repo)
+
+        service.recordPayment(1, paymentDate, Money.fromString("1000.00"),
+            interestAmount = Money.fromString("50.00"))
+
+        val updated = slot.captured
+        // paidAmount gravado = 1050 — o armazenamento está correto
+        assertEquals(0, Money.fromString("1050.00").compareTo(updated.paidAmount!!))
+        // amount NÃO muda (1000) — e é exatamente o que sumPaid() agrega para o saldo.
+        // Consequência: saldo cai 1000, não 1050. Os R$50 de juros desaparecem do saldo.
+        assertEquals(0, Money.fromString("1000.00").compareTo(updated.amount))
+    }
+
+    @Test
+    fun `CARACTERIZACAO P0-5 ao quitar PARTIAL os juros da baixa anterior somem do saldo`() {
+        // CARACTERIZAÇÃO — comportamento INCORRETO, mantido de propósito.
+        // Q5d (EncargosNoSaldoTest): ao mudar PARTIAL → PAID, calculateBalance para
+        // de usar SUM(paid_amount) e passa a usar SUM(amount). Os juros acumulados
+        // na 1ª baixa (R$50) desaparecem do saldo nesse momento.
+        // Será corrigido no E2 (C-06). Quando este teste QUEBRAR, é sinal de sucesso.
+        //
+        // Estado pós-1ª baixa: 300 principal + 50 juros → PARTIAL
+        //   paidAmount = 350, interestAmount = 50, amount = 1000
+        val repo = mockk<TransactionRepository>()
+        every { repo.findById(1) } returns expense(
+            status         = TransactionStatus.PARTIAL,
+            paidAmount     = "350.00",
+            interestAmount = "50.00"
+        )
+        val slot = slot<Transaction>()
+        every { repo.update(capture(slot)) } just Runs
+        val service = makeService(repo)
+
+        // 2ª baixa: 700 principal restante (sem novos encargos) → deve virar PAID
+        service.recordPayment(1, paymentDate, Money.fromString("700.00"))
+
+        val updated = slot.captured
+        assertEquals(TransactionStatus.PAID, updated.status)
+        // paidAmount acumulado correto: 350 (anterior) + 700 = 1050
+        assertEquals(0, Money.fromString("1050.00").compareTo(updated.paidAmount!!))
+        // amount permanece 1000 — é o que sumPaid() vai somar para o saldo.
+        // Ao virar PAID, saldo cai 1000 (amount), não 1050 (paidAmount).
+        // Os R$50 de juros da 1ª baixa desaparecem silenciosamente.
+        assertEquals(0, Money.fromString("1000.00").compareTo(updated.amount))
+    }
+}
