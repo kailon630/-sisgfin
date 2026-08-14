@@ -421,6 +421,72 @@ _Mova os cards aqui quando começar._
 
 ---
 
+### Frente Arquitetural — Correções ago/2026 (P0, E1, T, C-11, E2)
+
+> Frente horizontal de correção arquitetural e conformidade (ago/2026). Seção própria — não é uma fase de feature ordenada, por isso não vira "Fase 10".
+
+#### Correções Críticas P0 — commit `58a0e45` (tag `baseline-pre-E1`)
+
+- [x] **P0-1** — erros silenciados em `markAsPaidFull` / `cancel` / `duplicate` — agora propagam `errorMessage` no lugar de falhar em silêncio; origem `F2_FIX_P0.md`
+- [x] **P0-2** — ação "Quitar" oculta para perfil OPERADOR — `PayablesScreen`/`TransactionDetailsPanel` usam `canConfirmPayment()` (RN-12); origem `F2_FIX_P0.md`
+- [x] **P0-3** — `markAsPaidFull` passava `amount` total em vez do saldo restante — agora `recordPayment(id, data, existing.outstandingPrincipal)` (`TransactionService.kt:438`); origem `F2_FIX_P0.md`
+- [x] **P0-4** — acumulação de baixas parciais — `principalPaid` / `outstandingPrincipal` (`Transaction.kt:50-57`); acúmulo em `TransactionService.kt:390-408`; `PartialPaymentAccumulationTest` (9 testes) + `PartialBalanceTest` (11 testes); origem `P0_4_LIQUIDACAO.md`
+- [ ] **P0-5** — encargos (juros/multa) não saem do saldo — **documentado, NÃO corrigido**: `EncargosNoSaldoTest` (4 testes de caracterização) afirmam de propósito o comportamento incorreto; corrigir adiado; origem `P0_5_ENCARGOS_NO_SALDO.md`
+- [x] **V29** — coluna `reversed_type` + backfill a partir de `parent_transaction_id` + índice parcial — corrige R3.2 e R3.4 (`V29__transaction_reversed_type.sql`)
+
+#### Épico E1 — Painel de lançamento — tag `e1-concluido`
+
+- [x] **U-01** — `scrollResetKey` em `BaseCrudPanel`; scroll reseta ao trocar de item (`BaseCrudPanel.kt:28,90`; `TransactionDetailsPanel.kt:123`)
+- [x] **U-02** — seção "Resumo" oculta em lançamento novo (gate `if (item.id != 0)` no `TransactionDetailsPanel`)
+- [x] **U-03** — rótulo do botão conforme modo — "Criar Lançamento" / "Salvar Alterações" (`TransactionDetailsPanel.kt:122`)
+- [x] **U-04** — subtítulo conforme modo — "Novo lançamento" / parcela / resumo (`TransactionDetailsPanel.kt:117-121`)
+- [x] **U-06** — `TransactionPanelStateTest` — 9 testes
+- [ ] **U-05** — contador de sessão do painel — avaliado e **adiado** (não priorizado nesta rodada)
+
+#### Bloco T — Conformidade TCESP — tag `t-conformidade-concluido`
+
+- [x] **T-06** — `TransactionsScreen` passa `counterparties` à lista (era `CounterpartyMap.EMPTY`) — `TransactionsScreen.kt:54,208`
+- [x] **T-02** — `buildTcespDesc` abandona fallback para `description`; usa `"CREDOR NÃO IDENTIFICADO"` — `ReportsModels.kt:66`
+- [x] **T-01** — `ReportsViewModel` injeta `CounterpartyResolver`; Livro Diário resolve supplier → employee — `ReportsViewModel.kt:31,65-73`
+- [x] **T-04** — comprovante individual (RN-31) resolve credor de folha via resolver — `TransactionsViewModel.kt:305`
+- [x] **`BuildTcespDescTest`** — 8 testes
+- Origem: `R8_CREDOR_LIVRO_DIARIO.md` (achados R8.1, R8.3, R8.7)
+
+#### C-11 — Orçamento × estorno — commit `58a0e45` (tag `c11-orcamento-estorno` **não criada** no repo; evidência = commit + código)
+
+- [x] **`sumRealized` / `sumRealizedMonth`** deixam de dobrar o realizado no estorno — subtraem REVERSAL com `reversedType` = EXPENSE (`BudgetItemRepository.kt:107-164`)
+- [x] **Demonstrativo** — REVERSAL abate a coluna de origem via `reversed_type` (`ReportsViewModel.kt:157-167`)
+- [x] **Testes** — 2 testes de caracterização invertidos + 5 cenários novos (`BudgetRealizedReversalBehaviorTest`, 7 testes)
+- Origem: `R7_ORCAMENTO_E_OPERACAO.md` (achados R7.1, R7.2)
+- **Decisão registrada:** o R7 continha apenas diagnóstico; adotada a leitura de que o estorno anula a execução orçamentária (realizado volta a zero). Rubricas de exercícios com estorno mudam de valor retroativamente.
+
+#### Suíte de testes
+
+- [x] Evolução: 131 → 187 → 191 → 200 → 208 → **213** testes — confirmado em `./gradlew test` (BUILD SUCCESSFUL)
+
+---
+
+#### Pendente — Frente Arquitetural ago/2026
+
+**Bloqueado por decisão de negócio** (nada começa antes destas respostas):
+
+- [ ] **D1** — estorno de baixa × estorno de título — origem `SPEC_TRANSACTION_PAYMENTS.md`
+- [ ] **D2** — baixa em conta diferente da do título — origem `SPEC_TRANSACTION_PAYMENTS.md`
+- [ ] **D3** — desconto quita o principal? — **aguarda contador; bloqueia M1** — origem `SPEC_TRANSACTION_PAYMENTS.md`
+- [ ] **D4** — fechamento de período — origem `SPEC_TRANSACTION_PAYMENTS.md`
+- [ ] **D5** — semântica da transferência — **novo, do C-01** — origem `C00_C01_TRANSFERENCIA_E_SPEC.md`
+
+**Integridade de caixa (E2)** — depende das decisões acima; ordem interna ainda não definida:
+
+- [ ] **M1** — criar `transaction_payments` + backfill
+- [ ] **M2** — dual-write
+- [ ] **M3** — reconciliação (**portão**: query de verificação deve retornar zero linhas)
+- [ ] **M4** — migrar leituras (`sumPartialPaid`, `openingBalance`, Extrato, Livro Diário)
+- [ ] **M5** — UI: diálogo grava baixa; painel lista as baixas
+- [ ] **M6** — `paidAmount`
+
+---
+
 ## Legenda
 
 | Símbolo | Significado |
