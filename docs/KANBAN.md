@@ -470,6 +470,8 @@ _Mova os cards aqui quando começar._
 
 **Bloqueado por decisão de negócio** (nada começa antes destas respostas):
 
+> ⚠ **Backup automático (Fase 5) continua pendente e sem fila.** É a maior exposição do projeto: sistema de prestação de contas de convênio público sem rotina de backup. Deveria estar acima de tudo nesta lista.
+
 - [ ] **D1** — estorno de baixa × estorno de título — origem `SPEC_TRANSACTION_PAYMENTS.md`
 - [ ] **D2** — baixa em conta diferente da do título — origem `SPEC_TRANSACTION_PAYMENTS.md`
 - [ ] **D3** — desconto quita o principal? — **aguarda contador; bloqueia M1** — origem `SPEC_TRANSACTION_PAYMENTS.md`
@@ -484,6 +486,63 @@ _Mova os cards aqui quando começar._
 - [ ] **M4** — migrar leituras (`sumPartialPaid`, `openingBalance`, Extrato, Livro Diário)
 - [ ] **M5** — UI: diálogo grava baixa; painel lista as baixas
 - [ ] **M6** — `paidAmount`
+
+---
+
+#### Seletor de credor no lançamento — bloco em preparação
+
+> Funcionários PJ permanecem em `employees`; um lançamento tem fornecedor **ou** funcionário, nunca ambos.
+
+- [ ] **T-13** — discriminador de origem do lançamento (`origin`: MANUAL / PAYROLL_ENGINE / PAYROLL_IMPORT / RECURRENCE / OFX) — **pré-requisito duro**: `cancelPendingPayrollForMonth` filtra só por `employeeId` + status cancelável + janela de `dueDate`, sem distinguir origem (`TransactionService.kt:536`, `TransactionRepository.kt:820-837`). Com o seletor, a importação de folha cancelaria lançamentos manuais do mesmo funcionário no mês. Exige migração + backfill (tudo que hoje tem `employeeId` é de folha)
+- [ ] **T-14** — permitir `update` de `employeeId`, com teste — hoje `TransactionRepository.kt:268` deliberadamente não atualiza o campo (proteção dos lançamentos de folha); `SPEC_OPERACAO_CONSULTA.md` exige que a mudança seja explícita e testada — **pré-requisito duro**
+- [ ] **T-08** — chips `Fornecedor | Funcionário` + select único que troca de fonte no `TransactionDetailsPanel`; alternar o chip limpa o id do outro lado
+- [ ] **T-07** — exibir beneficiário no Resumo quando só há `employeeId` — hoje `supplierName = suppliers.find { it.id == item.supplierId }?.name` (`TransactionDetailsPanel.kt:95`), linha "Fornecedor" some; origem R1.1
+- [ ] **T-09** — validação de funcionário inativo, análoga à RN-02 — não existe `validateEmployee` em `TransactionService`; origem R1.4 / R7.3
+- [ ] **T-10** — UNIQUE em `employees.document` + verificação cruzada com `suppliers` — hoje só `suppliers` tem UNIQUE (V11); `employees` não tem índice nem constraint; `DocumentValidator.normalize()` já existe e serve para a comparação
+- [ ] **T-15** — normalizar `EmploymentType` para gravar `.name` em vez de `.label` — hoje persiste `"Estágio"` (com acento) enquanto `EntityType` grava `.name`; comparação por string acentuada é frágil se a regra documental derivar do vínculo
+
+> **Ponto aberto:** `SPEC_OPERACAO_CONSULTA.md` (F5) especifica um select único "BENEFICIÁRIO" com busca unificada e badge de origem, e define precedência `employeeId > supplierId`. A decisão do dono do produto é por **chips alternando a fonte**, sem coexistência. Além disso, o `CounterpartyMap.nameFor()` já implementado usa a precedência **inversa** (`supplierId → employeeId`). O SPEC precisa ser atualizado para refletir a decisão.
+
+#### Conformidade TCESP restante
+
+- [ ] **T-03** — `CF [DOC]` ausente em todos os lançamentos de folha — `PayrollEngine.kt:49-59` e `PayrollImportService.kt:94-127` não preenchem `documentType`/`documentNumber`; origem R8.2
+- [ ] **T-05** — extrato Excel com coluna FORNECEDOR vazia hardcoded (`StatementExporter.kt:99`); `StatementViewModel` não carrega suppliers nem employees; origem R8
+- [ ] **T-11** — `CounterpartyResolver.resolve()` calcula os ids mas carrega as tabelas inteiras via `findAll()`/`getAll()`; origem R8
+- [ ] **T-12** — saneamento de dados: lançamentos PAID sem fornecedor nem funcionário agora exibem "CREDOR NÃO IDENTIFICADO" no Livro Diário — contar e tratar antes da próxima prestação de contas
+- [ ] **R6.1 / R7.3** — folha gerada pelo `PayrollEngine` sem centro de custo nem categoria (0% de classificação na base); origem `R6_CLASSIFICACAO.md`
+- [ ] **R2.2** — não existe caminho de remessa bancária para fornecedor; `PayrollBankExporter` lê exclusivamente `employees` (V25); origem `R2_DADOS_BANCARIOS.md`
+- [ ] **R2.3** — funcionário sem dados bancários é omitido silenciosamente da remessa; origem `R2_DADOS_BANCARIOS.md`
+
+#### Transferência entre contas — confirmado pelo C-01
+
+> `createTransfer()` cria as duas pernas em PENDING, `calculateBalance` só conta pernas PAID, e não existe cascata de quitação.
+
+- [ ] **Contenção imediata** — bloquear `duplicate()` em lançamentos TRANSFER e fazer a cascata de cancelamento falhar com erro visível em vez de silêncio; **não depende de decisão de negócio**, pode ser feito antes do D5
+- [ ] **Saldo não movimenta** enquanto as pernas estão PENDING; quitar apenas uma perna produz saldo assimétrico (dinheiro sai de uma conta sem chegar na outra, ou aparece do nada)
+- [ ] **Cascata de cancelamento falha em silêncio** — `allowsCancel(other.status)` é falso para PAID e o código apenas pula, sem exceção e sem log (`TransactionService.kt:201-243`); dinheiro fica fora das duas contas
+- [ ] **Perna PAID não pode ser cancelada nem estornada** — `ReversalEligibility` bloqueia TRANSFER e PAID é terminal; único conserto é ADJUSTMENT manual; origem R7.7
+- [ ] **`duplicate()` inverte a direção** — duplicata da perna de origem recebe `parentTransactionId` preenchido e passa a ser contada como *entrada* por `sumPaidTransferIn`; `allowsDuplicate` não bloqueia nenhum status
+- [ ] **Pernas TRANSFER viram OVERDUE** e aparecem no chip "A pagar" — `OverdueEngine` e `filterActionRequired` não filtram por tipo
+- [ ] **Sem teste de lifecycle de saldo** — `TransferAndReversalTest` cobre validações e elegibilidade, mas nenhum teste cria o par via `createTransfer()` e verifica `calculateBalance()` nas duas contas
+
+#### Riscos estruturais
+
+- [ ] **R4.1** — engines sem UNIQUE de idempotência no banco
+- [ ] **R4.2** — falhas de Payroll/Recurrence no boot engolidas sem log (`Main.kt:169-187`)
+- [ ] **R4.5** — sem lock otimista / `FOR UPDATE` em escritas financeiras; vetor real: desktop multi-instância + API 8080 + engines no boot
+- [ ] **R7.5** — sem single-instance; API em 0.0.0.0 sem TLS
+- [ ] **R7.6** — retorno das engines descartado; sem log nem tela de geração
+- [ ] **R7.4** — inativar funcionário deixa PENDING futuros pagáveis (`EmployeeService.toggleActive` sem cascata)
+- [ ] **S-01** — `parent_transaction_id` codifica quatro relações (parcela, estorno, duplicata, perna de transferência) sem discriminador
+- [ ] **S-02** — `OverdueEngine` roda como efeito colateral de `listAll()`; telas que não o disparam veem status defasado
+- [ ] **S-04** — `generateInstallments()` chama `repository.insert()` direto, contornando `validateForSave`
+- [ ] **S-05** — soft delete altera saldo sem transição de estado nem evento
+- [ ] **S-06** — índices compostos para as agregações; sem índice em `payment_date`, usado pelo saldo de abertura
+- [ ] **S-07** — `recordPayment()` grava dois registros de auditoria por baixa
+- [ ] **R5.1** — chip "A pagar" mistura receitas e despesas
+- [ ] **R5.3** — sem totalizadores na listagem de Movimentações
+- [ ] **R5.4** — grupos usam `dueDate`, Extrato usa `paymentDate`, sem seletor
+- [ ] **R3.1 / R3.5** — `REQUISITOS_SISGFIN.md` e `RETRATO_PROJETO.md` desatualizados quanto à RN-04 e ao tipo REVERSAL
 
 ---
 
