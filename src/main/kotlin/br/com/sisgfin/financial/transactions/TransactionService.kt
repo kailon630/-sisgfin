@@ -201,6 +201,28 @@ class TransactionService(
     fun cancel(id: Int) {
         val existing = repository.findById(id) ?: return
         TransactionStateMachine.assertTransition(existing.status, TransactionStatus.CANCELED)
+
+        // RN-21: resolve and validate transfer counterpart BEFORE any mutation.
+        // Without this guard, deactivate(id) runs first and leaves the main leg
+        // canceled while the sister leg stays PAID — inconsistent state.
+        val transferCounterpart: Transaction? = if (existing.type == TransactionType.TRANSFER) {
+            val other = if (existing.parentTransactionId != null) {
+                repository.findById(existing.parentTransactionId)
+                    ?.takeIf { it.type == TransactionType.TRANSFER }
+            } else {
+                repository.findTransferDestination(id)
+            }
+            other?.also { o ->
+                if (!TransactionStateMachine.allowsCancel(o.status)) {
+                    throw IllegalStateException(
+                        "Não é possível cancelar: a outra perna desta transferência (#${o.id}) " +
+                        "está com status ${o.status} e não pode ser cancelada. " +
+                        "Cancelar apenas um lado deixaria o valor fora das duas contas."
+                    )
+                }
+            }
+        } else null
+
         repository.deactivate(id)
         addTimeline(id, TimelineEventType.CANCELED, "Transação cancelada", null, existing.status, TransactionStatus.CANCELED)
         audit("TRANSACTION_CANCELED", id, auditDetail(TransactionStatus.CANCELED, existing.status, existing.amount))
@@ -220,25 +242,15 @@ class TransactionService(
             }
         }
 
-        // RN-21: cancelar um lado de uma transferência cancela o par vinculado
-        if (existing.type == TransactionType.TRANSFER) {
-            val counterpart = if (existing.parentTransactionId != null) {
-                repository.findById(existing.parentTransactionId)
-                    ?.takeIf { it.type == TransactionType.TRANSFER }
-            } else {
-                repository.findTransferDestination(id)
-            }
-            counterpart?.let { other ->
-                if (TransactionStateMachine.allowsCancel(other.status)) {
-                    repository.deactivate(other.id)
-                    addTimeline(
-                        other.id, TimelineEventType.CANCELED,
-                        "Cancelada em cascata — transferência vinculada #$id",
-                        null, other.status, TransactionStatus.CANCELED
-                    )
-                    audit("TRANSACTION_CANCELED", other.id, auditDetail(TransactionStatus.CANCELED, other.status, other.amount))
-                }
-            }
+        // RN-21: execute counterpart cancellation (already validated above)
+        transferCounterpart?.let { other ->
+            repository.deactivate(other.id)
+            addTimeline(
+                other.id, TimelineEventType.CANCELED,
+                "Cancelada em cascata — transferência vinculada #$id",
+                null, other.status, TransactionStatus.CANCELED
+            )
+            audit("TRANSACTION_CANCELED", other.id, auditDetail(TransactionStatus.CANCELED, other.status, other.amount))
         }
     }
 
@@ -440,6 +452,11 @@ class TransactionService(
 
     fun duplicate(id: Int): Int {
         val source = repository.findById(id) ?: throw IllegalArgumentException("Transação não encontrada.")
+        if (source.type == TransactionType.TRANSFER) {
+            throw IllegalArgumentException(
+                "Transferências não podem ser duplicadas. Crie uma nova transferência pelo botão Transferência."
+            )
+        }
         val copy = source.copy(
             id = 0,
             status = TransactionStatus.PENDING,
