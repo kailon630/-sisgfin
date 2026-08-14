@@ -43,6 +43,7 @@ fun TransactionDetailsPanel(
     val uiState by viewModel.uiState.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
     val suppliers by viewModel.suppliers.collectAsState()
+    val counterparties by viewModel.counterparties.collectAsState()
     val costCenters by viewModel.costCenters.collectAsState()
     val categories by viewModel.categories.collectAsState()
     val projects by viewModel.projects.collectAsState()
@@ -92,7 +93,7 @@ fun TransactionDetailsPanel(
 
     val actions = viewModel.getAvailableActions(item.status, item.type)
     val accountName = accounts.find { it.id == item.accountId }?.name ?: "—"
-    val supplierName = suppliers.find { it.id == item.supplierId }?.name
+    val creditorName = counterparties.nameFor(item)
     val costCenterName = costCenters.find { it.id == item.costCenterId }?.name
     val projectName = projects.find { it.id == item.projectId }?.name
     val categoryName = categories.find { it.id == item.categoryId }?.name
@@ -177,7 +178,7 @@ fun TransactionDetailsPanel(
                 SummaryRow("Vencimento", item.dueDate.format(dateFormatter))
                 item.paymentDate?.let { SummaryRow("Pagamento", it.format(dateFormatter)) }
                 SummaryRow("Conta", accountName)
-                supplierName?.let { SummaryRow("Fornecedor", it) }
+                creditorName?.let { SummaryRow("Beneficiário", it) }
                 costCenterName?.let { SummaryRow("Centro de Custo", it) }
                 projectName?.let { SummaryRow("Projeto", it) }
                 categoryName?.let { SummaryRow("Categoria", it) }

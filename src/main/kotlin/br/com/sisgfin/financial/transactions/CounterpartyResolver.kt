@@ -28,10 +28,10 @@ class CounterpartyResolver(
         val supplierIds = transactions.mapNotNull { it.supplierId }.toSet()
         val employeeIds = transactions.mapNotNull { it.employeeId }.toSet()
         val suppliers = if (supplierIds.isNotEmpty())
-            supplierRepository.findAll().associate { it.id to it.name }
+            supplierRepository.findByIds(supplierIds).associate { it.id to it.name }
         else emptyMap()
         val employees = if (employeeIds.isNotEmpty())
-            employeeRepository.getAll().associate { it.id to it.name }
+            employeeRepository.getByIds(employeeIds).associate { it.id to it.name }
         else emptyMap()
         return CounterpartyMap(suppliers, employees)
     }

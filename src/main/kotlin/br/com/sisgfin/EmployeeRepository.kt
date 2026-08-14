@@ -17,6 +17,12 @@ class EmployeeRepository {
             .singleOrNull()
     }
 
+    fun getByIds(ids: Set<Int>): List<Employee> = transaction {
+        Employees.selectAll().where { Employees.id inList ids }
+            .orderBy(Employees.name to SortOrder.ASC)
+            .map { it.toEmployee() }
+    }
+
     fun getAllActive(): List<Employee> = transaction {
         Employees.selectAll().where { Employees.active eq true }
             .orderBy(Employees.name to SortOrder.ASC)

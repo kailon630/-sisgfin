@@ -9,6 +9,8 @@ import br.com.sisgfin.financial.categories.ExpenseCategoryRepository
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.projects.Project
 import br.com.sisgfin.financial.projects.ProjectRepository
+import br.com.sisgfin.financial.transactions.CounterpartyMap
+import br.com.sisgfin.financial.transactions.CounterpartyResolver
 import br.com.sisgfin.financial.transactions.TransactionRepository
 import br.com.sisgfin.financial.transactions.TransactionType
 import kotlinx.coroutines.CoroutineScope
@@ -31,6 +33,7 @@ data class StatementUiState(
     val filter: StatementFilter = StatementFilter(),
     val openingBalance: Money = Money.ZERO,
     val entries: List<StatementEntry> = emptyList(),
+    val counterpartyMap: CounterpartyMap = CounterpartyMap.EMPTY,
     val isLoading: Boolean = false,
     val exportMessage: String? = null,
     val errorMessage: String? = null
@@ -41,6 +44,7 @@ class StatementViewModel(
     private val transactionRepository: TransactionRepository,
     private val costCenterRepository: CostCenterRepository,
     private val categoryRepository: ExpenseCategoryRepository,
+    private val counterpartyResolver: CounterpartyResolver,
     private val projectRepository: ProjectRepository? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -110,18 +114,20 @@ class StatementViewModel(
                         projectId = filter.projectId
                     )
 
+                    val counterpartyMap = counterpartyResolver.resolve(raw)
                     var running = opening
                     val entries = raw.map { tx ->
                         val signed = signedAmount(tx)
                         running = running + signed
                         StatementEntry(tx, signed, running)
                     }
-                    Pair(opening, entries)
+                    Triple(opening, entries, counterpartyMap)
                 }
-            }.onSuccess { (opening, entries) ->
+            }.onSuccess { (opening, entries, counterpartyMap) ->
                 _uiState.value = _uiState.value.copy(
                     openingBalance = opening,
                     entries = entries,
+                    counterpartyMap = counterpartyMap,
                     isLoading = false
                 )
             }.onFailure { e ->
@@ -139,7 +145,7 @@ class StatementViewModel(
             runCatching {
                 withContext(Dispatchers.IO) {
                     val outDir = File(System.getProperty("user.home"), "Documents/SisgFin")
-                    StatementExporter.exportToExcel(account, state.filter, state.openingBalance, state.entries, outDir)
+                    StatementExporter.exportToExcel(account, state.filter, state.openingBalance, state.entries, outDir, state.counterpartyMap)
                 }
             }.onSuccess { file ->
                 _uiState.value = _uiState.value.copy(exportMessage = "Excel salvo: ${file.absolutePath}")

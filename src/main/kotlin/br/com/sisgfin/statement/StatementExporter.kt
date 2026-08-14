@@ -3,6 +3,7 @@ package br.com.sisgfin.statement
 import br.com.sisgfin.FinancialAccount
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.MoneyFormatter
+import br.com.sisgfin.financial.transactions.CounterpartyMap
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.pdmodel.PDPage
 import org.apache.pdfbox.pdmodel.PDPageContentStream
@@ -29,7 +30,8 @@ object StatementExporter {
         filter: StatementFilter,
         openingBalance: Money,
         entries: List<StatementEntry>,
-        outputDir: File
+        outputDir: File,
+        counterpartyMap: CounterpartyMap = CounterpartyMap.EMPTY
     ): File {
         val workbook = XSSFWorkbook()
         val sheet = workbook.createSheet("Extrato")
@@ -96,7 +98,7 @@ object StatementExporter {
             row.createCell(3).setCellValue(
                 listOfNotNull(tx.documentType, tx.documentNumber).joinToString(" ").ifBlank { "" }
             )
-            row.createCell(4).setCellValue("") // supplier name placeholder (not loaded here)
+            row.createCell(4).setCellValue(counterpartyMap.nameFor(tx) ?: "")
 
             if (entry.isCredit) {
                 row.createCell(5).setCellValue("")

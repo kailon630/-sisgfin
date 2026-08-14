@@ -37,6 +37,10 @@ class SupplierRepository : MutableEntityRepository<Supplier> {
         Suppliers.selectAll().where { Suppliers.id eq id }.map { rowToSupplier(it) }.singleOrNull()
     }
 
+    fun findByIds(ids: Set<Int>): List<Supplier> = transaction {
+        Suppliers.selectAll().where { Suppliers.id inList ids }.map { rowToSupplier(it) }
+    }
+
     override fun insert(supplier: Supplier): Int = transaction {
         Suppliers.insert {
             it[document] = supplier.document
