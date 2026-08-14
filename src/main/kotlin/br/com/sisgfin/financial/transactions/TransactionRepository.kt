@@ -235,6 +235,13 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
         } get FinancialTransactionsTable.id
     }
 
+    fun insertTransferPair(source: Transaction, destinationTemplate: Transaction): Pair<Int, Int> = transaction {
+        val sourceId = insert(source)
+        val destination = destinationTemplate.copy(parentTransactionId = sourceId)
+        val destinationId = insert(destination)
+        sourceId to destinationId
+    }
+
     override fun update(entity: Transaction) {
         transaction {
             FinancialTransactionsTable.update({ FinancialTransactionsTable.id eq entity.id }) {

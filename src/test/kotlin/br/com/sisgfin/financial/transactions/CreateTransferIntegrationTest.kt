@@ -11,16 +11,16 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.time.LocalDateTime
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
  * C-14 / Bloco 2 — caracterização de TransactionService.createTransfer().
+ * C-15 — atomicidade: os dois inserts ocorrem em insertTransferPair() via transaction{}.
  *
  * Exercita o service REAL com repositórios mockados.
  * Verifica: validações de pré-condição, estrutura do par de transações
- * geradas (source/destination) e integridade dos campos-chave.
+ * geradas (source/destinationTemplate) e integridade dos campos-chave.
  */
 class CreateTransferIntegrationTest {
 
@@ -110,8 +110,7 @@ class CreateTransferIntegrationTest {
         every { accountRepo.findById(1) } returns account(1)
         every { accountRepo.findById(2) } returns account(2)
         val repo = mockk<TransactionRepository>()
-        val captured = mutableListOf<Transaction>()
-        every { repo.insert(capture(captured)) } returnsMany listOf(10, 20)
+        every { repo.insertTransferPair(any(), any()) } returns (10 to 20)
         val service = makeService(repo = repo, accountRepo = accountRepo)
 
         val (sourceId, destId) = service.createTransfer(
@@ -124,7 +123,7 @@ class CreateTransferIntegrationTest {
 
         assertEquals(10, sourceId)
         assertEquals(20, destId)
-        assertEquals(2, captured.size)
+        verify(exactly = 1) { repo.insertTransferPair(any(), any()) }
     }
 
     @Test
@@ -132,13 +131,13 @@ class CreateTransferIntegrationTest {
         val accountRepo = mockk<FinancialAccountRepository>()
         every { accountRepo.findById(any()) } returns account(1)
         val repo = mockk<TransactionRepository>()
-        val captured = mutableListOf<Transaction>()
-        every { repo.insert(capture(captured)) } returnsMany listOf(10, 20)
+        val sourceSlot = slot<Transaction>()
+        every { repo.insertTransferPair(capture(sourceSlot), any()) } returns (10 to 20)
         val service = makeService(repo = repo, accountRepo = accountRepo)
 
         service.createTransfer(1, 2, Money.fromString("500.00"), transferDate, "TED")
 
-        val source = captured[0]
+        val source = sourceSlot.captured
         assertEquals(TransactionType.TRANSFER, source.type)
         assertEquals(TransactionStatus.PENDING, source.status)
         assertEquals(1, source.accountId)
@@ -147,22 +146,22 @@ class CreateTransferIntegrationTest {
     }
 
     @Test
-    fun `createTransfer destination tem tipo TRANSFER status PENDING e parentId apontando para source`() {
+    fun `createTransfer destination template tem tipo TRANSFER status PENDING e accountId destino`() {
+        // parentTransactionId e vinculado dentro de insertTransferPair (nivel repositorio).
         val accountRepo = mockk<FinancialAccountRepository>()
         every { accountRepo.findById(any()) } returns account(1)
         val repo = mockk<TransactionRepository>()
-        val captured = mutableListOf<Transaction>()
-        every { repo.insert(capture(captured)) } returnsMany listOf(10, 20)
+        val destSlot = slot<Transaction>()
+        every { repo.insertTransferPair(any(), capture(destSlot)) } returns (10 to 20)
         val service = makeService(repo = repo, accountRepo = accountRepo)
 
         service.createTransfer(1, 2, Money.fromString("500.00"), transferDate, "TED")
 
-        val destination = captured[1]
-        assertEquals(TransactionType.TRANSFER, destination.type)
-        assertEquals(TransactionStatus.PENDING, destination.status)
-        assertEquals(2, destination.accountId)
-        assertEquals(10, destination.parentTransactionId)
-        assertEquals(0, Money.fromString("500.00").compareTo(destination.amount))
+        val destTemplate = destSlot.captured
+        assertEquals(TransactionType.TRANSFER, destTemplate.type)
+        assertEquals(TransactionStatus.PENDING, destTemplate.status)
+        assertEquals(2, destTemplate.accountId)
+        assertEquals(0, Money.fromString("500.00").compareTo(destTemplate.amount))
     }
 
     @Test
@@ -170,15 +169,15 @@ class CreateTransferIntegrationTest {
         val accountRepo = mockk<FinancialAccountRepository>()
         every { accountRepo.findById(any()) } returns account(1)
         val repo = mockk<TransactionRepository>()
-        val captured = mutableListOf<Transaction>()
-        every { repo.insert(capture(captured)) } returnsMany listOf(10, 20)
+        val destSlot = slot<Transaction>()
+        every { repo.insertTransferPair(any(), capture(destSlot)) } returns (10 to 20)
         val service = makeService(repo = repo, accountRepo = accountRepo)
 
         service.createTransfer(1, 2, Money.fromString("500.00"), transferDate, "TED para fornecedor")
 
-        val destination = captured[1]
-        assertTrue(destination.description.startsWith("Recebimento:"))
-        assertTrue(destination.description.contains("TED para fornecedor"))
+        val destTemplate = destSlot.captured
+        assertTrue(destTemplate.description.startsWith("Recebimento:"))
+        assertTrue(destTemplate.description.contains("TED para fornecedor"))
     }
 
     @Test
@@ -186,14 +185,15 @@ class CreateTransferIntegrationTest {
         val accountRepo = mockk<FinancialAccountRepository>()
         every { accountRepo.findById(any()) } returns account(1)
         val repo = mockk<TransactionRepository>()
-        val captured = mutableListOf<Transaction>()
-        every { repo.insert(capture(captured)) } returnsMany listOf(10, 20)
+        val sourceSlot = slot<Transaction>()
+        val destSlot = slot<Transaction>()
+        every { repo.insertTransferPair(capture(sourceSlot), capture(destSlot)) } returns (10 to 20)
         val service = makeService(repo = repo, accountRepo = accountRepo)
 
         val amount = Money.fromString("1234.56")
         service.createTransfer(1, 2, amount, transferDate, "Transferência")
 
-        assertEquals(0, captured[0].amount.compareTo(captured[1].amount))
+        assertEquals(0, sourceSlot.captured.amount.compareTo(destSlot.captured.amount))
     }
 
     @Test
@@ -201,8 +201,9 @@ class CreateTransferIntegrationTest {
         val accountRepo = mockk<FinancialAccountRepository>()
         every { accountRepo.findById(any()) } returns account(1)
         val repo = mockk<TransactionRepository>()
-        val captured = mutableListOf<Transaction>()
-        every { repo.insert(capture(captured)) } returnsMany listOf(10, 20)
+        val sourceSlot = slot<Transaction>()
+        val destSlot = slot<Transaction>()
+        every { repo.insertTransferPair(capture(sourceSlot), capture(destSlot)) } returns (10 to 20)
         val service = makeService(repo = repo, accountRepo = accountRepo)
 
         service.createTransfer(
@@ -215,39 +216,33 @@ class CreateTransferIntegrationTest {
             categoryId           = 3
         )
 
-        assertEquals(7, captured[0].costCenterId)
-        assertEquals(3, captured[0].categoryId)
-        assertEquals(7, captured[1].costCenterId)
-        assertEquals(3, captured[1].categoryId)
+        assertEquals(7, sourceSlot.captured.costCenterId)
+        assertEquals(3, sourceSlot.captured.categoryId)
+        assertEquals(7, destSlot.captured.costCenterId)
+        assertEquals(3, destSlot.captured.categoryId)
     }
 
-    // ── CARACTERIZAÇÃO — atomicidade ──────────────────────────────────────────
+    // ── atomicidade — comportamento CORRETO ──────────────────────────────────
 
     @Test
-    fun `CARACTERIZACAO C-15 createTransfer nao e atomico perna de origem fica orfa`() {
-        // CARACTERIZAÇÃO — comportamento INCORRETO, mantido de propósito.
-        // Não existe transaction{} do Exposed envolvendo os dois inserts.
-        // Se o segundo insert falhar, a perna de origem já está gravada no banco
-        // sem par — dinheiro sai da conta de origem sem entra na de destino.
-        // Corrigir em C-15: envolver os dois inserts em transaction{} do Exposed.
-        // Quando este teste QUEBRAR (nenhuma exceção ou eventually rollback), é sinal de sucesso.
-        //
-        // Nota técnica: MockK conta invocações mesmo quando lançam exceção. Por isso
-        // usamos match { accountId == N } para distinguir cada perna individualmente.
+    fun `createTransfer atomico excecao na criacao nao deixa perna orfa`() {
+        // C-15 CORRIGIDO: os dois inserts ocorrem dentro de insertTransferPair(),
+        // que usa transaction{} do Exposed. Se o metodo lancar, nenhum insert foi
+        // confirmado no banco — nao ha perna de origem orfa.
+        // Verificado aqui: se insertTransferPair() lanca, o service propaga a excecao
+        // e NUNCA chama insert() separadamente (o que poderia deixar a origem gravada).
         val accountRepo = mockk<FinancialAccountRepository>()
         every { accountRepo.findById(any()) } returns account(1)
         val repo = mockk<TransactionRepository>(relaxed = true)
-        // primeiro insert (origem) sucede; segundo (destino) lança
-        every { repo.insert(any()) } returns 10 andThenThrows RuntimeException("DB error na segunda perna")
+        every { repo.insertTransferPair(any(), any()) } throws RuntimeException("DB error atomico")
         val service = makeService(repo = repo, accountRepo = accountRepo)
 
         assertThrows<RuntimeException> {
             service.createTransfer(1, 2, Money.fromString("500.00"), transferDate, "TED")
         }
 
-        // perna de origem (accountId=1, sem parentId) chegou ao insert — em banco real já persistida
-        verify(exactly = 1) { repo.insert(match { it.accountId == 1 && it.parentTransactionId == null }) }
-        // perna de destino foi tentada e causou a exceção — não há rollback da origem
-        verify(exactly = 1) { repo.insert(match { it.accountId == 2 }) }
+        // chamada unica e atomica — nunca inserts separados (que poderiam deixar origem orfa)
+        verify(exactly = 1) { repo.insertTransferPair(any(), any()) }
+        verify(exactly = 0) { repo.insert(any()) }
     }
 }

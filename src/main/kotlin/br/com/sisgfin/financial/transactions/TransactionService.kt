@@ -292,22 +292,20 @@ class TransactionService(
             createdAt = now,
             updatedAt = now
         )
-        val sourceId = repository.insert(source)
+        val destinationTemplate = source.copy(
+            accountId = destinationAccountId,
+            description = "Recebimento: $description"
+        )
+        val (sourceId, destinationId) = repository.insertTransferPair(source, destinationTemplate)
+
         addTimeline(sourceId, TimelineEventType.TRANSFER_OUT,
             "Transferência de $amount enviada para conta #$destinationAccountId",
             amount, null, source.status)
         audit("TRANSFER_CREATED", sourceId, "source=$sourceAccountId;dest=$destinationAccountId;amount=$amount")
 
-        val destination = source.copy(
-            id = 0,
-            accountId = destinationAccountId,
-            description = "Recebimento: $description",
-            parentTransactionId = sourceId
-        )
-        val destinationId = repository.insert(destination)
         addTimeline(destinationId, TimelineEventType.TRANSFER_IN,
             "Transferência de $amount recebida da conta #$sourceAccountId",
-            amount, null, destination.status)
+            amount, null, source.status)
         audit("TRANSFER_CREATED", destinationId, "source=$sourceAccountId;dest=$destinationAccountId;amount=$amount;pair=#$sourceId")
 
         return sourceId to destinationId
