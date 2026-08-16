@@ -33,7 +33,7 @@ val viewModelModule = module {
     factory { FinancialAccountViewModel(get()) }
     factory { CostCenterViewModel(get()) }
     factory { ExpenseCategoryViewModel(get()) }
-    factory { TransactionsViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    factory { TransactionsViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     factory { ContractViewModel(get(), get()) }
     factory { RecurringViewModel(get(), get(), get(), get(), get(), get()) }
     factory { BalancePanelViewModel(get(), get(), get()) }

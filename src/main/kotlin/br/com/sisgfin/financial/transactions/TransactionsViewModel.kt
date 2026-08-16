@@ -1,5 +1,7 @@
 package br.com.sisgfin.financial.transactions
 
+import br.com.sisgfin.Employee
+import br.com.sisgfin.EmployeeRepository
 import br.com.sisgfin.FinancialAccount
 import br.com.sisgfin.FinancialAccountRepository
 import br.com.sisgfin.CostCenter
@@ -48,7 +50,8 @@ class TransactionsViewModel(
     private val recurrenceTemplateService: RecurrenceTemplateService? = null,
     private val contractService: ContractService? = null,
     private val projectRepository: ProjectRepository? = null,
-    private val counterpartyResolver: CounterpartyResolver
+    private val counterpartyResolver: CounterpartyResolver,
+    private val employeeRepository: EmployeeRepository? = null
 ) : BaseCrudViewModel<Transaction>(
     operations = service,
     emptyFactory = {
@@ -74,6 +77,9 @@ class TransactionsViewModel(
 
     private val _suppliers = MutableStateFlow<List<Supplier>>(emptyList())
     val suppliers: StateFlow<List<Supplier>> = _suppliers.asStateFlow()
+
+    private val _employees = MutableStateFlow<List<Employee>>(emptyList())
+    val employees: StateFlow<List<Employee>> = _employees.asStateFlow()
 
     private val _costCenters = MutableStateFlow<List<CostCenter>>(emptyList())
     val costCenters: StateFlow<List<CostCenter>> = _costCenters.asStateFlow()
@@ -152,6 +158,9 @@ class TransactionsViewModel(
                 _suppliers.value = sups
                 _costCenters.value = centers
             }
+            runCatching {
+                withContext(Dispatchers.IO) { employeeRepository?.getAllActive() ?: emptyList() }
+            }.onSuccess { _employees.value = it }
             runCatching {
                 withContext(Dispatchers.IO) { categoryRepository.findAll() }
             }.onSuccess { _categories.value = it }

@@ -43,6 +43,7 @@ fun TransactionDetailsPanel(
     val uiState by viewModel.uiState.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
     val suppliers by viewModel.suppliers.collectAsState()
+    val employees by viewModel.employees.collectAsState()
     val counterparties by viewModel.counterparties.collectAsState()
     val costCenters by viewModel.costCenters.collectAsState()
     val categories by viewModel.categories.collectAsState()
@@ -61,6 +62,11 @@ fun TransactionDetailsPanel(
     var type by remember(item.id) { mutableStateOf(item.type) }
     var accountId by remember(item.id) { mutableStateOf(item.accountId) }
     var supplierId by remember(item.id) { mutableStateOf(item.supplierId) }
+    var employeeId by remember(item.id) { mutableStateOf(item.employeeId) }
+    // chip selecionado: true = Fornecedor/Cliente, false = Funcionário
+    var counterpartIsSupplier by remember(item.id) {
+        mutableStateOf(item.supplierId != null || item.employeeId == null)
+    }
     var costCenterId by remember(item.id) { mutableStateOf(item.costCenterId) }
     var projectId by remember(item.id) { mutableStateOf(item.projectId) }
     var categoryId by remember(item.id) { mutableStateOf(item.categoryId) }
@@ -100,7 +106,6 @@ fun TransactionDetailsPanel(
     val canEdit = item.id == 0 || !TransactionStateMachine.isTerminal(item.status)
 
     val accountOptions = accounts.map { it.id to it.name }
-    val counterpartLabel = if (type == TransactionType.INCOME) "CLIENTE" else "FORNECEDOR"
     val supplierOptions = suppliers
         .filter { s ->
             if (type == TransactionType.INCOME)
@@ -136,7 +141,8 @@ fun TransactionDetailsPanel(
                         type = type,
                         status = if (item.id == 0) TransactionStatus.PENDING else item.status,
                         accountId = accId,
-                        supplierId = supplierId,
+                        supplierId = if (counterpartIsSupplier) supplierId else null,
+                        employeeId = if (!counterpartIsSupplier) employeeId else null,
                         costCenterId = costCenterId,
                         projectId = projectId,
                         categoryId = categoryId,
@@ -348,13 +354,51 @@ fun TransactionDetailsPanel(
                         }
                     }
                 }
-                if (supplierOptions.isNotEmpty()) {
-                    WsSelectField(
-                        label = counterpartLabel,
-                        options = supplierOptions,
-                        selectedId = supplierId,
-                        onSelect = { supplierId = it }
-                    )
+                // T-08: chips Fornecedor|Funcionário (Funcionário só em DESPESA)
+                val supplierChipLabel = if (type == TransactionType.INCOME) "Cliente" else "Fornecedor"
+                val showEmployeeChip = type == TransactionType.EXPENSE && employees.isNotEmpty()
+                if (supplierOptions.isNotEmpty() || showEmployeeChip) {
+                    Text("BENEFICIÁRIO", style = MaterialTheme.typography.labelMedium, color = WsTextSecondary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        WsFilterChip(
+                            selected = counterpartIsSupplier,
+                            onClick = {
+                                if (!counterpartIsSupplier) {
+                                    counterpartIsSupplier = true
+                                    employeeId = null
+                                }
+                            },
+                            label = { Text(supplierChipLabel) }
+                        )
+                        if (showEmployeeChip) {
+                            WsFilterChip(
+                                selected = !counterpartIsSupplier,
+                                onClick = {
+                                    if (counterpartIsSupplier) {
+                                        counterpartIsSupplier = false
+                                        supplierId = null
+                                    }
+                                },
+                                label = { Text("Funcionário") }
+                            )
+                        }
+                    }
+                    if (counterpartIsSupplier && supplierOptions.isNotEmpty()) {
+                        WsSelectField(
+                            label = supplierChipLabel.uppercase(),
+                            options = supplierOptions,
+                            selectedId = supplierId,
+                            onSelect = { supplierId = it }
+                        )
+                    } else if (!counterpartIsSupplier && showEmployeeChip) {
+                        val employeeOptions = employees.map { it.id to it.name }
+                        WsSelectField(
+                            label = "FUNCIONÁRIO",
+                            options = employeeOptions,
+                            selectedId = employeeId,
+                            onSelect = { employeeId = it }
+                        )
+                    }
                 }
                 if (costCenterOptions.isNotEmpty()) {
                     WsSelectField(

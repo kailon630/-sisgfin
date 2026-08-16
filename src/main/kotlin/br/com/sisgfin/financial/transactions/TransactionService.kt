@@ -2,6 +2,7 @@ package br.com.sisgfin.financial.transactions
 
 import br.com.sisgfin.AuditLog
 import br.com.sisgfin.AuditRepository
+import br.com.sisgfin.EmployeeRepository
 import br.com.sisgfin.FinancialAccountRepository
 import br.com.sisgfin.Permission
 import br.com.sisgfin.CostCenterRepository
@@ -30,7 +31,8 @@ class TransactionService(
     private val auditRepository: AuditRepository,
     private val timelineRepository: TransactionTimelineRepository,
     private val sessionManager: SessionManager,
-    private val ledgerService: LedgerService = LedgerService()
+    private val ledgerService: LedgerService = LedgerService(),
+    private val employeeRepository: EmployeeRepository? = null
 ) : CrudOperations<Transaction> {
 
     var listFilter: TransactionListFilter = TransactionListFilter.All
@@ -88,6 +90,7 @@ class TransactionService(
         TransactionValidator.validateForSave(prepared, existing = null)
         validateAccount(prepared.accountId)
         validateSupplier(prepared.supplierId)
+        validateEmployee(prepared.employeeId)
         val id = repository.insert(prepared)
         val createdMsg = if (n > 1) "Transação criada (parcela 1/$n)" else "Transação criada"
         addTimeline(id, TimelineEventType.CREATED, createdMsg, null, null, prepared.status)
@@ -142,6 +145,7 @@ class TransactionService(
         TransactionValidator.validateForSave(resolved, existing)
         validateAccount(resolved.accountId)
         validateSupplier(resolved.supplierId)
+        validateEmployee(resolved.employeeId)
 
         val statusChanged = existing.status != resolved.status
         if (statusChanged) {
@@ -738,6 +742,15 @@ class TransactionService(
             ?: throw IllegalArgumentException("Fornecedor não encontrado.")
         if (!supplier.isActive) {
             throw IllegalArgumentException("Fornecedor \"${supplier.name}\" está inativo e não pode ser vinculado a um lançamento.")
+        }
+    }
+
+    private fun validateEmployee(employeeId: Int?) {
+        if (employeeId == null || employeeRepository == null) return
+        val employee = employeeRepository.getById(employeeId)
+            ?: throw IllegalArgumentException("Funcionário não encontrado.")
+        if (!employee.active) {
+            throw IllegalArgumentException("Funcionário \"${employee.name}\" está inativo e não pode ser vinculado a um lançamento.")
         }
     }
 
