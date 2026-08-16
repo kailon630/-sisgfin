@@ -1,6 +1,7 @@
 # Entidade de Baixa — `transaction_payments`
 
-> **Não é para implementar ainda.** Documento de decisão. Depende do P0-4 concluído.
+> **M1, M2 e M3 concluídos** — commits `234bb3a`, `20f0f36`, ver relatório em `docs/relatorios/M1_M3_MIGRACAO_BAIXAS.md`.
+> M4 pode avançar: reconciliação na base dev = **0 divergências**.
 >
 > Classificação: **conformidade**, não melhoria. Vai na fila junto com fechamento de período, não em "backlog de arquitetura".
 
@@ -39,6 +40,7 @@ CREATE TABLE transaction_payments (
     fine_amount         NUMERIC(19,4) NOT NULL DEFAULT 0 CHECK (fine_amount    >= 0),
     discount_amount     NUMERIC(19,4) NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
     reversed_by_id      INTEGER NULL REFERENCES transaction_payments(id),
+    idempotency_key     VARCHAR(100) NULL,                    -- adicionado: impede baixa dupla por duplo clique
     notes               TEXT NULL,
     created_by          INTEGER NULL REFERENCES users(id),
     created_at          TIMESTAMP NOT NULL DEFAULT now()
@@ -46,6 +48,7 @@ CREATE TABLE transaction_payments (
 
 CREATE INDEX idx_tp_transaction ON transaction_payments(transaction_id);
 CREATE INDEX idx_tp_date_account ON transaction_payments(payment_date, account_id);
+CREATE UNIQUE INDEX idx_tp_idempotency ON transaction_payments(idempotency_key) WHERE idempotency_key IS NOT NULL;
 ```
 
 **Caixa efetivo da baixa** = `principal_amount + interest_amount + fine_amount − discount_amount`.
@@ -76,11 +79,9 @@ principalPago = Σ(principal_amount) das baixas não estornadas
 
 ---
 
-## 3. Decisões em aberto
+## 3. Decisões
 
-Precisam de resposta antes de escrever código.
-
-### D1 — Estorno de baixa × estorno de título
+### D1 — Estorno de baixa × estorno de título _(em aberto)_
 
 Hoje `reverseTransaction` estorna o título inteiro criando um `REVERSAL`. Com baixas, surgem duas operações distintas:
 
@@ -91,21 +92,38 @@ São a mesma coisa quando há uma única baixa. Divergem com várias. Proposta: 
 
 **Impacto no C1:** `reversed_type` e a direção do estorno no saldo continuam válidos, mas o estorno de baixa não precisa de linha `REVERSAL` — basta marcar `reversed_by_id` e a soma exclui. Menos linhas fantasma no Livro Diário.
 
-### D2 — Baixa em conta diferente do título
+### D2 — Baixa em conta diferente do título _(em aberto)_
 
 O modelo permite. A UI deve expor? Argumento a favor: acontece na prática (título na conta do convênio, pago pelo caixa). Contra: aumenta a chance de erro de digitação em campo que hoje não existe.
 
-Recomendação: permitir no modelo, **não** expor na UI inicialmente. Default = conta do título.
+Recomendação: permitir no modelo, **não** expor na UI inicialmente. Default = conta do título. Implementado assim em M2.
 
-### D3 — Desconto afeta o principal ou é despesa negativa?
+### D3 — Desconto ✅ **RESOLVIDO**
 
-Se `principal_amount = 950` e `discount_amount = 50` num título de 1.000, o título quita? Contabilmente sim (quitação com abatimento), mas `principalPago` seria 950.
+**D3(a) — Desconto quita o título:**
+`principalQuitado = Σ(principal_amount + discount_amount)`.
+Título de R$ 1.000 pago com R$ 950 principal + R$ 50 desconto → **PAID**. O caixa registra
+R$ 950 (o que de fato saiu). `paidAmount` **não** inclui o desconto — continua sendo caixa puro
+(`principal + juros + multa`). Implementado em M2: `principalQuitado = newPrincipalPaid + totalDiscount`.
 
-Recomendação: `principalPago = Σ(principal_amount + discount_amount)` para efeito de quitação, enquanto o caixa registra apenas `principal_amount`. Confirmar com o contador da associação.
+**D3(b) — Desconto reduz a despesa na rubrica orçamentária** _(não implementado, entra no M4)_:
+O realizado da rubrica deve refletir o caixa efetivo (R$ 950), não o valor do título.
+A mudança em `sumRealized` é responsabilidade do M4.
 
-### D4 — Fechamento de período
+**Nota:** baixas com `discount_amount > 0` mostram divergência na query de reconciliação
+(Σ ≠ `paid_amount`) enquanto `paidAmount` não incluir o desconto. Zero baixas com desconto
+existem hoje; a reconciliação real = 0 divergências.
+
+### D4 — Fechamento de período _(em aberto)_
 
 Baixa com `payment_date` em período fechado deve ser bloqueada. Como o fechamento ainda não existe, a tabela nasce sem essa guarda — mas o campo `payment_date` é exatamente o gancho de que o fechamento precisará. **Vale sequenciar fechamento logo depois**, não antes.
+
+### D5 — Transferência entre contas gera baixas ✅ **RESOLVIDO (design)**
+
+Transferência é evento consumado: nasce PAID e movimenta duas contas na criação. Logo
+`createTransfer` deve gerar duas baixas na mesma transação, sem passar por `recordPayment`.
+O modelo suporta isso (`account_id` próprio por baixa). **Não implementado neste bloco** —
+entra no M4/M5. A tabela foi desenhada para comportar esse caso.
 
 ---
 
@@ -115,9 +133,9 @@ Produção com prestação de contas pública. Nenhuma etapa pode quebrar o que 
 
 | Etapa | O que faz | Reversível? |
 |---|---|---|
-| **M1** | Criar tabela. Backfill: cada título com `paidAmount > 0` gera **uma** baixa com `payment_date = paymentDate`, `account_id = accountId`, principal = `paidAmount − juros − multa`. | sim (drop table) |
-| **M2** | **Dual-write:** `recordPayment` grava a baixa **e** continua atualizando `paidAmount`. Leituras seguem usando `paidAmount`. | sim |
-| **M3** | **Reconciliação:** job/teste que compara `Σ(baixas)` com `paidAmount` de cada título. Rodar até divergência zero por período estável. | — |
+| **M1** ✅ | Criar tabela. Backfill: cada título com `paidAmount > 0` gera baixas via timeline (fonte primária) ou campo colapsado (fallback). `idempotency_key` adicionado ao DDL. — `234bb3a` | sim (drop table) |
+| **M2** ✅ | **Dual-write:** `recordPayment` grava a baixa **e** continua atualizando `paidAmount`. `discountAmount` implementado (D3a). — `20f0f36` | sim |
+| **M3** ✅ | **Reconciliação:** `findReconciliationDivergences()` implementada. Resultado contra base dev: **0 divergências**. Portão aprovado. | — |
 | **M4** | Migrar leituras: `sumPartialPaid`, `openingBalance`, Extrato, Livro Diário passam a somar `transaction_payments`. Uma por vez, com comparação de resultado antes/depois. | sim |
 | **M5** | UI: dialog de liquidação (F7) grava baixa; painel de detalhes ganha lista de baixas. | sim |
 | **M6** | `paidAmount` vira somente leitura, calculado. Decidir se permanece como cache ou é removido. | — |
