@@ -93,11 +93,6 @@ encontrado.
 
 ## 7. Limitações conhecidas (não bloqueiam M4)
 
-- **Atomicidade update/insert (M2):** As escritas em `repository.update()` e
-  `paymentRepository.insertOrIgnore()` são sequenciais, não atômicas. Refatorar
-  para o padrão C-15 (`updateWithPayment` no repositório) requer atualizar os
-  testes `CARACTERIZACAO` existentes — fora do escopo deste bloco.
-
 - **Desconto e reconciliação:** Baixas com `discount_amount > 0` mostrarão
   divergência na query de reconciliação porque `paid_amount` não inclui o efeito
   do desconto (decisão de M2 para não afetar leituras). A reconciliação completa
