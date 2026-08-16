@@ -273,7 +273,8 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
                 it[FinancialTransactionsTable.interestAmount]       = entity.interestAmount?.value
                 it[FinancialTransactionsTable.fineAmount]           = entity.fineAmount?.value
                 it[FinancialTransactionsTable.projectId]            = entity.projectId
-                // employeeId e reversedType não são atualizados via update geral — definidos na criação
+                it[FinancialTransactionsTable.employeeId]           = entity.employeeId
+                // reversedType não é atualizado — define a direção do estorno no saldo (V29) e é imutável
             }
         }
     }

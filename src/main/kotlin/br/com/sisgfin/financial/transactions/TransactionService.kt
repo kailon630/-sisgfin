@@ -104,17 +104,32 @@ class TransactionService(
         val existing = repository.findById(transaction.id)
             ?: throw IllegalArgumentException("Transação não encontrada.")
 
+        // T-14: lançamentos de folha não podem ter employeeId alterado
+        val payrollOrigins = setOf(TransactionOrigin.PAYROLL_ENGINE, TransactionOrigin.PAYROLL_IMPORT)
+        if (existing.origin in payrollOrigins && transaction.employeeId != existing.employeeId) {
+            throw IllegalStateException(
+                "Lançamento de folha de pagamento (origin=${existing.origin}) não permite alteração de funcionário vinculado."
+            )
+        }
+
+        // T-14: supplierId e employeeId são mutuamente exclusivos
+        val resolved = when {
+            transaction.employeeId != null -> transaction.copy(supplierId = null)
+            transaction.supplierId != null -> transaction.copy(employeeId = null)
+            else -> transaction
+        }
+
         // C2: lançamento terminal não permite alteração de campos financeiros
         if (TransactionStateMachine.isTerminal(existing.status)) {
             val alterouCampoFinanceiro =
-                transaction.amount != existing.amount ||
-                transaction.accountId != existing.accountId ||
-                transaction.paymentDate != existing.paymentDate ||
-                transaction.type != existing.type ||
-                transaction.dueDate != existing.dueDate ||
-                transaction.paidAmount != existing.paidAmount ||
-                transaction.interestAmount != existing.interestAmount ||
-                transaction.fineAmount != existing.fineAmount
+                resolved.amount != existing.amount ||
+                resolved.accountId != existing.accountId ||
+                resolved.paymentDate != existing.paymentDate ||
+                resolved.type != existing.type ||
+                resolved.dueDate != existing.dueDate ||
+                resolved.paidAmount != existing.paidAmount ||
+                resolved.interestAmount != existing.interestAmount ||
+                resolved.fineAmount != existing.fineAmount
 
             if (alterouCampoFinanceiro) {
                 throw IllegalStateException(
@@ -124,41 +139,41 @@ class TransactionService(
             }
         }
 
-        TransactionValidator.validateForSave(transaction, existing)
-        validateAccount(transaction.accountId)
-        validateSupplier(transaction.supplierId)
+        TransactionValidator.validateForSave(resolved, existing)
+        validateAccount(resolved.accountId)
+        validateSupplier(resolved.supplierId)
 
-        val statusChanged = existing.status != transaction.status
+        val statusChanged = existing.status != resolved.status
         if (statusChanged) {
-            TransactionStateMachine.assertTransition(existing.status, transaction.status)
+            TransactionStateMachine.assertTransition(existing.status, resolved.status)
         }
 
-        repository.update(transaction.copy(updatedAt = LocalDateTime.now()))
+        repository.update(resolved.copy(updatedAt = LocalDateTime.now()))
 
-        val reclassMsg = buildReclassificationMessage(existing, transaction)
+        val reclassMsg = buildReclassificationMessage(existing, resolved)
         addTimeline(
-            transaction.id,
+            resolved.id,
             TimelineEventType.UPDATED,
             reclassMsg ?: "Dados da transação atualizados",
-            transaction.amount,
+            resolved.amount,
             existing.status,
-            transaction.status
+            resolved.status
         )
-        audit("TRANSACTION_UPDATED", transaction.id, auditDetail(transaction.status, existing.status, transaction.amount))
-        warnIfOutsideCostCenterPeriod(transaction, transaction.id)
+        audit("TRANSACTION_UPDATED", resolved.id, auditDetail(resolved.status, existing.status, resolved.amount))
+        warnIfOutsideCostCenterPeriod(resolved, resolved.id)
         if (statusChanged) {
             addTimeline(
-                transaction.id,
+                resolved.id,
                 TimelineEventType.STATUS_CHANGED,
-                "Status: ${existing.status.displayName} → ${transaction.status.displayName}",
+                "Status: ${existing.status.displayName} → ${resolved.status.displayName}",
                 null,
                 existing.status,
-                transaction.status
+                resolved.status
             )
             audit(
                 "TRANSACTION_STATUS_CHANGED",
-                transaction.id,
-                auditDetail(transaction.status, existing.status, transaction.amount)
+                resolved.id,
+                auditDetail(resolved.status, existing.status, resolved.amount)
             )
         }
     }
