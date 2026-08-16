@@ -51,11 +51,10 @@ class ReconciliationTest {
     ): TransactionService {
         val txRepo = mockk<TransactionRepository>()
         every { txRepo.findById(1) } returnsMany txStates
-        every { txRepo.update(any()) } just Runs
+        every { txRepo.updateWithPayment(any(), capture(insertedPayments)) } returns true
 
         val paymentRepo = mockk<TransactionPaymentRepository>()
         every { paymentRepo.sumDiscountByTransaction(any()) } returns Money.ZERO
-        every { paymentRepo.insertOrIgnore(capture(insertedPayments)) } returns true
 
         val session = mockk<SessionManager>()
         every { session.currentUser } returns MutableStateFlow(null)

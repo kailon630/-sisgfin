@@ -1,18 +1,12 @@
 package br.com.sisgfin.financial.payments
 
-import br.com.sisgfin.AuditRepository
-import br.com.sisgfin.CostCenterRepository
-import br.com.sisgfin.EmployeeRepository
-import br.com.sisgfin.FinancialAccountRepository
 import br.com.sisgfin.SessionManager
-import br.com.sisgfin.SupplierRepository
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.transactions.Transaction
 import br.com.sisgfin.financial.transactions.TransactionRepository
 import br.com.sisgfin.financial.transactions.TransactionService
 import br.com.sisgfin.financial.transactions.TransactionStatus
 import br.com.sisgfin.financial.transactions.TransactionType
-import br.com.sisgfin.financial.transactions.timeline.TransactionTimelineRepository
 import io.mockk.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.jupiter.api.Test
@@ -22,14 +16,16 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * M2 — dual-write de baixas em recordPayment.
+ * M2 — dual-write atômico de baixas em recordPayment.
  *
  * Verifica que recordPayment:
- * - Cria uma TransactionPayment com valores corretos
- * - Continua atualizando paidAmount (dual-write)
+ * - Delega ao repository.updateWithPayment() quando paymentRepository está presente
+ * - Cria TransactionPayment com valores corretos
+ * - Continua refletindo paidAmount no título (dual-write)
  * - D3(a): desconto de 50 em título de 1000 (principal 950) → PAID
- * - Idempotência: mesma chamada duas vezes não insere duas baixas
- * - Baixa parcial e segunda baixa geram linhas separadas
+ * - Idempotência: mesma chamada duas vezes envia mesmo idempotencyKey ao repositório
+ * - Duas baixas separadas geram dois chamadas a updateWithPayment
+ * - Se updateWithPayment lança, exceção não é engolida (atomicidade)
  */
 class RecordPaymentDualWriteTest {
 
@@ -83,10 +79,8 @@ class RecordPaymentDualWriteTest {
         val repo        = mockk<TransactionRepository>()
         val paymentRepo = mockk<TransactionPaymentRepository>(relaxed = true)
         every { repo.findById(1) } returns expense()
-        every { repo.update(any()) } just Runs
-
         val slot = slot<TransactionPayment>()
-        every { paymentRepo.insertOrIgnore(capture(slot)) } returns true
+        every { repo.updateWithPayment(any(), capture(slot)) } returns true
 
         makeService(repo, paymentRepo).recordPayment(
             id             = 1,
@@ -113,8 +107,7 @@ class RecordPaymentDualWriteTest {
         val paymentRepo = mockk<TransactionPaymentRepository>(relaxed = true)
         every { repo.findById(1) } returns expense()
         val updatedSlot = slot<Transaction>()
-        every { repo.update(capture(updatedSlot)) } just Runs
-        every { paymentRepo.insertOrIgnore(any()) } returns true
+        every { repo.updateWithPayment(capture(updatedSlot), any()) } returns true
 
         makeService(repo, paymentRepo).recordPayment(1, paymentDate, Money.fromString("1000.00"))
 
@@ -130,9 +123,8 @@ class RecordPaymentDualWriteTest {
         val paymentRepo = mockk<TransactionPaymentRepository>()
         every { repo.findById(1) } returns expense()
         val updatedSlot = slot<Transaction>()
-        every { repo.update(capture(updatedSlot)) } just Runs
+        every { repo.updateWithPayment(capture(updatedSlot), any()) } returns true
         every { paymentRepo.sumDiscountByTransaction(1) } returns Money.ZERO
-        every { paymentRepo.insertOrIgnore(any()) } returns true
 
         makeService(repo, paymentRepo).recordPayment(
             id              = 1,
@@ -146,57 +138,57 @@ class RecordPaymentDualWriteTest {
         assertEquals(0, Money.fromString("950.00").compareTo(updatedSlot.captured.paidAmount!!))
     }
 
-    // ── idempotência: mesma chamada duas vezes não insere duas baixas ─────────
+    // ── idempotência: mesma chave enviada ao repositório nas duas chamadas ────
 
     @Test
-    fun `segunda chamada identica retorna sem inserir nova baixa`() {
+    fun `segunda chamada identica envia mesmo idempotencyKey para repositorio gerenciar deduplicacao`() {
         val repo        = mockk<TransactionRepository>()
         val paymentRepo = mockk<TransactionPaymentRepository>(relaxed = true)
         every { repo.findById(1) } returns expense()
-        every { repo.update(any()) } just Runs
-        // Primeira chamada insere, segunda retorna false (idempotente)
-        every { paymentRepo.insertOrIgnore(any()) } returnsMany listOf(true, false)
+        val capturedPayments = mutableListOf<TransactionPayment>()
+        every { repo.updateWithPayment(any(), capture(capturedPayments)) } returns true
 
         val service = makeService(repo, paymentRepo)
         service.recordPayment(1, paymentDate, Money.fromString("1000.00"))
+        service.recordPayment(1, paymentDate, Money.fromString("1000.00"))
 
-        // Simula segundo findById com estado já PAID para testar idempotência no repo
-        // O repo.insertOrIgnore foi chamado uma vez; a segunda chamada retornaria false
-        verify(exactly = 1) { paymentRepo.insertOrIgnore(any()) }
+        assertEquals(2, capturedPayments.size)
+        assertEquals(
+            capturedPayments[0].idempotencyKey,
+            capturedPayments[1].idempotencyKey,
+            "Mesmo idempotencyKey nas duas chamadas — repo decide deduplicação"
+        )
     }
 
     // ── duas baixas separadas ────────────────────────────────────────────────
 
     @Test
-    fun `baixa parcial seguida de quitacao gera duas chamadas a insertOrIgnore`() {
+    fun `baixa parcial seguida de quitacao gera duas chamadas a updateWithPayment`() {
         val repo        = mockk<TransactionRepository>()
         val paymentRepo = mockk<TransactionPaymentRepository>(relaxed = true)
 
-        // Primeira chamada: PENDING
         every { repo.findById(1) } returnsMany listOf(
             expense(status = TransactionStatus.PENDING),
             expense(status = TransactionStatus.PARTIAL, paidAmount = "400.00")
         )
-        every { repo.update(any()) } just Runs
-        every { paymentRepo.insertOrIgnore(any()) } returns true
+        every { repo.updateWithPayment(any(), any()) } returns true
 
         val service = makeService(repo, paymentRepo)
         service.recordPayment(1, paymentDate, Money.fromString("400.00"))
         service.recordPayment(1, paymentDate.plusDays(1), Money.fromString("600.00"))
 
-        verify(exactly = 2) { paymentRepo.insertOrIgnore(any()) }
+        verify(exactly = 2) { repo.updateWithPayment(any(), any()) }
     }
 
     // ── idempotency_key gerada e não nula ────────────────────────────────────
 
     @Test
-    fun `insertOrIgnore recebe payment com idempotencyKey nao nula`() {
+    fun `updateWithPayment recebe payment com idempotencyKey nao nula`() {
         val repo        = mockk<TransactionRepository>()
         val paymentRepo = mockk<TransactionPaymentRepository>(relaxed = true)
         every { repo.findById(1) } returns expense()
-        every { repo.update(any()) } just Runs
         val slot = slot<TransactionPayment>()
-        every { paymentRepo.insertOrIgnore(capture(slot)) } returns true
+        every { repo.updateWithPayment(any(), capture(slot)) } returns true
 
         makeService(repo, paymentRepo).recordPayment(1, paymentDate, Money.fromString("1000.00"))
 
@@ -229,5 +221,22 @@ class RecordPaymentDualWriteTest {
         service.recordPayment(1, paymentDate, Money.fromString("1000.00"))
 
         verify(exactly = 1) { repo.update(any()) }
+        verify(exactly = 0) { repo.updateWithPayment(any(), any()) }
+    }
+
+    // ── atomicidade: falha em updateWithPayment propaga sem efeito colateral ──
+
+    @Test
+    fun `se updateWithPayment lanca excecao recordPayment nao engole o erro`() {
+        val repo        = mockk<TransactionRepository>()
+        val paymentRepo = mockk<TransactionPaymentRepository>(relaxed = true)
+        every { repo.findById(1) } returns expense()
+        every { repo.updateWithPayment(any(), any()) } throws RuntimeException("falha simulada no insert")
+
+        assertThrows<RuntimeException> {
+            makeService(repo, paymentRepo).recordPayment(1, paymentDate, Money.fromString("1000.00"))
+        }
+        // Caminho legado não foi acionado — o update atômico é o único caminho
+        verify(exactly = 0) { repo.update(any()) }
     }
 }

@@ -3,8 +3,11 @@ package br.com.sisgfin.financial.transactions
 import br.com.sisgfin.core.domain.MutableEntityRepository
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.toMoney
+import br.com.sisgfin.financial.payments.TransactionPayment
+import br.com.sisgfin.financial.payments.TransactionPaymentsTable
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.sql.SQLException
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.YearMonth
@@ -234,6 +237,71 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             it[FinancialTransactionsTable.reversedType]         = entity.reversedType?.name
             it[FinancialTransactionsTable.origin]               = entity.origin.name
         } get FinancialTransactionsTable.id
+    }
+
+    fun updateWithPayment(entity: Transaction, payment: TransactionPayment): Boolean = transaction {
+        FinancialTransactionsTable.update({ FinancialTransactionsTable.id eq entity.id }) {
+            it[FinancialTransactionsTable.type]          = entity.type.name
+            it[FinancialTransactionsTable.status]        = entity.status.name
+            it[description]                              = entity.description
+            it[amount]                                   = entity.amount.value
+            it[issueDate]                                = entity.issueDate
+            it[dueDate]                                  = entity.dueDate
+            it[paymentDate]                              = entity.paymentDate
+            it[paidAmount]                               = entity.paidAmount?.value
+            it[accountId]                                = entity.accountId
+            it[supplierId]                               = entity.supplierId
+            it[costCenterId]                             = entity.costCenterId
+            it[notes]                                    = entity.notes
+            it[documentType]                             = entity.documentType
+            it[documentNumber]                           = entity.documentNumber
+            it[installmentCurrent]                       = entity.installmentCurrent
+            it[installmentTotal]                         = entity.installmentTotal
+            it[categoryId]                               = entity.categoryId
+            it[updatedAt]                                = LocalDateTime.now()
+            it[isActive]                                 = entity.isActive
+            it[parentTransactionId]                      = entity.parentTransactionId
+            it[ledgerEntryId]                            = entity.ledgerEntryId
+            it[FinancialTransactionsTable.reconciledWithFitId]  = entity.reconciledWithFitId
+            it[FinancialTransactionsTable.recurrenceTemplateId] = entity.recurrenceTemplateId
+            it[FinancialTransactionsTable.contractId]           = entity.contractId
+            it[FinancialTransactionsTable.interestAmount]       = entity.interestAmount?.value
+            it[FinancialTransactionsTable.fineAmount]           = entity.fineAmount?.value
+            it[FinancialTransactionsTable.projectId]            = entity.projectId
+            it[FinancialTransactionsTable.employeeId]           = entity.employeeId
+            // reversedType não é atualizado — define a direção do estorno no saldo (V29) e é imutável
+        }
+
+        val key = payment.idempotencyKey
+        if (key != null) {
+            val exists = TransactionPaymentsTable.selectAll()
+                .where { TransactionPaymentsTable.idempotencyKey eq key }
+                .count() > 0
+            if (exists) return@transaction false
+        }
+
+        try {
+            TransactionPaymentsTable.insert {
+                it[TransactionPaymentsTable.transactionId]   = payment.transactionId
+                it[TransactionPaymentsTable.paymentDate]     = payment.paymentDate
+                it[TransactionPaymentsTable.accountId]       = payment.accountId
+                it[TransactionPaymentsTable.principalAmount] = payment.principalAmount.value
+                it[TransactionPaymentsTable.interestAmount]  = payment.interestAmount.value
+                it[TransactionPaymentsTable.fineAmount]      = payment.fineAmount.value
+                it[TransactionPaymentsTable.discountAmount]  = payment.discountAmount.value
+                it[TransactionPaymentsTable.reversedById]    = payment.reversedById
+                it[TransactionPaymentsTable.idempotencyKey]  = payment.idempotencyKey
+                it[TransactionPaymentsTable.notes]           = payment.notes
+                it[TransactionPaymentsTable.createdBy]       = payment.createdBy
+                it[TransactionPaymentsTable.createdAt]       = payment.createdAt
+            }
+            true
+        } catch (e: Exception) {
+            val isUnique = generateSequence(e as Throwable) { it.cause }
+                .filterIsInstance<SQLException>()
+                .any { it.sqlState == "23505" }
+            if (isUnique) false else throw e
+        }
     }
 
     fun insertTransferPair(source: Transaction, destinationTemplate: Transaction): Pair<Int, Int> = transaction {

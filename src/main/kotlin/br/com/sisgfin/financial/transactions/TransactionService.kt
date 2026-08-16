@@ -457,12 +457,8 @@ class TransactionService(
         )
         TransactionValidator.validateForSave(updated, existing)
 
-        // M2: dual-write — atualiza o título e insere a baixa.
-        // Nota: as duas escritas são sequenciais (não atômicas) — plena atomicidade requer
-        // refatorar para o padrão C-15 (updateWithPayment no repositório), o que exigiria
-        // modificar os testes CARACTERIZACAO existentes (fora do escopo deste bloco).
+        // M2 (atômico): C-15 — update do título e insert da baixa no mesmo transaction {}.
         val userId = sessionManager.currentUser.value?.id
-        repository.update(updated)
         if (paymentRepository != null) {
             val payment = TransactionPayment(
                 transactionId   = id,
@@ -476,7 +472,9 @@ class TransactionService(
                 createdBy       = userId,
                 createdAt       = LocalDateTime.now()
             )
-            paymentRepository.insertOrIgnore(payment)
+            repository.updateWithPayment(updated, payment)
+        } else {
+            repository.update(updated)
         }
 
         ledgerService.recordPayment(updated, cashThisBaixa, paymentDate)
