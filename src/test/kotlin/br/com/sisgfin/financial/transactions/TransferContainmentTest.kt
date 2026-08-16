@@ -7,6 +7,7 @@ import br.com.sisgfin.FinancialAccountRepository
 import br.com.sisgfin.SessionManager
 import br.com.sisgfin.SupplierRepository
 import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.payments.TransactionPaymentRepository
 import br.com.sisgfin.financial.transactions.timeline.TransactionTimelineRepository
 import io.mockk.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,13 +34,16 @@ class TransferContainmentTest {
     ): TransactionService {
         every { session.currentUser } returns MutableStateFlow(null)
         return TransactionService(
-            repository          = repo,
-            accountRepository   = accountRepo,
-            supplierRepository  = mockk(relaxed = true),
+            repository           = repo,
+            accountRepository    = accountRepo,
+            supplierRepository   = mockk(relaxed = true),
             costCenterRepository = mockk(relaxed = true),
-            auditRepository     = mockk(relaxed = true),
-            timelineRepository  = mockk(relaxed = true),
-            sessionManager      = session
+            auditRepository      = mockk(relaxed = true),
+            timelineRepository   = mockk(relaxed = true),
+            sessionManager       = session,
+            ledgerService        = mockk(relaxed = true),
+            employeeRepository   = mockk(relaxed = true),
+            paymentRepository    = mockk(relaxed = true)
         )
     }
 

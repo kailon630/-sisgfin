@@ -4,6 +4,7 @@ import br.com.sisgfin.FinancialAccount
 import br.com.sisgfin.FinancialAccountRepository
 import br.com.sisgfin.SessionManager
 import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.payments.TransactionPaymentRepository
 import io.mockk.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.jupiter.api.Test
@@ -41,7 +42,10 @@ class GenerateInstallmentsIntegrationTest {
             costCenterRepository = mockk(relaxed = true),
             auditRepository      = mockk(relaxed = true),
             timelineRepository   = mockk(relaxed = true),
-            sessionManager       = session
+            sessionManager       = session,
+            ledgerService        = mockk(relaxed = true),
+            employeeRepository   = mockk(relaxed = true),
+            paymentRepository    = mockk(relaxed = true)
         )
     }
 

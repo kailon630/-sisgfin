@@ -6,6 +6,7 @@ import br.com.sisgfin.FinancialAccountRepository
 import br.com.sisgfin.SessionManager
 import br.com.sisgfin.SupplierRepository
 import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.payments.TransactionPaymentRepository
 import br.com.sisgfin.financial.transactions.timeline.TransactionTimelineRepository
 import io.mockk.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,7 +30,8 @@ class RecordPaymentIntegrationTest {
 
     private fun makeService(
         repo: TransactionRepository = mockk(relaxed = true),
-        withPermission: Boolean = true
+        withPermission: Boolean = true,
+        paymentRepo: TransactionPaymentRepository = mockk(relaxed = true)
     ): TransactionService {
         val session = mockk<SessionManager>()
         every { session.currentUser } returns MutableStateFlow(null)
@@ -41,7 +43,10 @@ class RecordPaymentIntegrationTest {
             costCenterRepository = mockk(relaxed = true),
             auditRepository      = mockk(relaxed = true),
             timelineRepository   = mockk(relaxed = true),
-            sessionManager       = session
+            sessionManager       = session,
+            ledgerService        = mockk(relaxed = true),
+            employeeRepository   = mockk(relaxed = true),
+            paymentRepository    = paymentRepo
         )
     }
 
@@ -73,7 +78,7 @@ class RecordPaymentIntegrationTest {
         val repo = mockk<TransactionRepository>()
         every { repo.findById(1) } returns expense()
         val slot = slot<Transaction>()
-        every { repo.update(capture(slot)) } just Runs
+        every { repo.updateWithPayment(capture(slot), any()) } returns true
         val service = makeService(repo)
 
         service.recordPayment(1, paymentDate, Money.fromString("1000.00"))
@@ -89,7 +94,7 @@ class RecordPaymentIntegrationTest {
         val repo = mockk<TransactionRepository>()
         every { repo.findById(1) } returns expense().copy(type = TransactionType.INCOME)
         val slot = slot<Transaction>()
-        every { repo.update(capture(slot)) } just Runs
+        every { repo.updateWithPayment(capture(slot), any()) } returns true
         val service = makeService(repo)
 
         service.recordPayment(1, paymentDate, Money.fromString("1000.00"))
@@ -104,7 +109,7 @@ class RecordPaymentIntegrationTest {
         val repo = mockk<TransactionRepository>()
         every { repo.findById(1) } returns expense()
         val slot = slot<Transaction>()
-        every { repo.update(capture(slot)) } just Runs
+        every { repo.updateWithPayment(capture(slot), any()) } returns true
         val service = makeService(repo)
 
         service.recordPayment(1, paymentDate, Money.fromString("400.00"))
@@ -122,7 +127,7 @@ class RecordPaymentIntegrationTest {
         val repo = mockk<TransactionRepository>()
         every { repo.findById(1) } returns expense(status = TransactionStatus.OVERDUE)
         val slot = slot<Transaction>()
-        every { repo.update(capture(slot)) } just Runs
+        every { repo.updateWithPayment(capture(slot), any()) } returns true
         val service = makeService(repo)
 
         service.recordPayment(1, paymentDate, Money.fromString("1000.00"))
@@ -138,7 +143,7 @@ class RecordPaymentIntegrationTest {
         val repo = mockk<TransactionRepository>()
         every { repo.findById(1) } returns expense(status = TransactionStatus.PARTIAL, paidAmount = "400.00")
         val slot = slot<Transaction>()
-        every { repo.update(capture(slot)) } just Runs
+        every { repo.updateWithPayment(capture(slot), any()) } returns true
         val service = makeService(repo)
 
         service.recordPayment(1, paymentDate, Money.fromString("600.00"))
@@ -233,7 +238,7 @@ class RecordPaymentIntegrationTest {
         val repo = mockk<TransactionRepository>()
         every { repo.findById(1) } returns expense()
         val slot = slot<Transaction>()
-        every { repo.update(capture(slot)) } just Runs
+        every { repo.updateWithPayment(capture(slot), any()) } returns true
         val service = makeService(repo)
 
         service.recordPayment(1, paymentDate, Money.fromString("1000.00"),
@@ -250,7 +255,7 @@ class RecordPaymentIntegrationTest {
         val repo = mockk<TransactionRepository>()
         every { repo.findById(1) } returns expense()
         val slot = slot<Transaction>()
-        every { repo.update(capture(slot)) } just Runs
+        every { repo.updateWithPayment(capture(slot), any()) } returns true
         val service = makeService(repo)
 
         service.recordPayment(1, paymentDate, Money.fromString("1000.00"),
@@ -266,7 +271,7 @@ class RecordPaymentIntegrationTest {
         val repo = mockk<TransactionRepository>()
         every { repo.findById(1) } returns expense()
         val slot = slot<Transaction>()
-        every { repo.update(capture(slot)) } just Runs
+        every { repo.updateWithPayment(capture(slot), any()) } returns true
         val service = makeService(repo)
 
         service.recordPayment(1, paymentDate, Money.fromString("1000.00"),
@@ -293,7 +298,7 @@ class RecordPaymentIntegrationTest {
         val repo = mockk<TransactionRepository>()
         every { repo.findById(1) } returns expense()
         val slot = slot<Transaction>()
-        every { repo.update(capture(slot)) } just Runs
+        every { repo.updateWithPayment(capture(slot), any()) } returns true
         val service = makeService(repo)
 
         service.recordPayment(1, paymentDate, Money.fromString("1000.00"),
@@ -324,7 +329,7 @@ class RecordPaymentIntegrationTest {
             interestAmount = "50.00"
         )
         val slot = slot<Transaction>()
-        every { repo.update(capture(slot)) } just Runs
+        every { repo.updateWithPayment(capture(slot), any()) } returns true
         val service = makeService(repo)
 
         // 2ª baixa: 700 principal restante (sem novos encargos) → deve virar PAID
@@ -356,13 +361,13 @@ class RecordPaymentIntegrationTest {
         every { repo.findById(1) } returns sourceTx
         every { repo.findById(2) } returns sisterTx
         val slot = slot<Transaction>()
-        every { repo.update(capture(slot)) } just Runs
+        every { repo.updateWithPayment(capture(slot), any()) } returns true
         val service = makeService(repo)
 
         service.recordPayment(1, paymentDate, Money.fromString("1000.00"))
 
-        // source foi quitada: exatamente um update
-        verify(exactly = 1) { repo.update(any()) }
+        // source foi quitada: exatamente um updateWithPayment
+        verify(exactly = 1) { repo.updateWithPayment(any(), any()) }
         assertEquals(TransactionStatus.PAID, slot.captured.status)
         // irmã NUNCA foi consultada nem atualizada — ausência de cascade
         verify(exactly = 0) { repo.findById(2) }

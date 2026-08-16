@@ -1,9 +1,12 @@
 package br.com.sisgfin.financial.transactions
 
+import br.com.sisgfin.Employee
+import br.com.sisgfin.EmployeeRepository
 import br.com.sisgfin.FinancialAccount
 import br.com.sisgfin.FinancialAccountRepository
 import br.com.sisgfin.SessionManager
 import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.payments.TransactionPaymentRepository
 import io.mockk.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.jupiter.api.Test
@@ -17,6 +20,13 @@ import kotlin.test.assertTrue
  * cancelPendingPayrollForMonth não cancela lançamentos MANUAL com employeeId.
  */
 class TransactionOriginTest {
+
+    private fun stubEmployeeRepo() = mockk<EmployeeRepository>().also {
+        every { it.getById(any()) } returns Employee(
+            name = "Stub", document = "00000000000", phone = "", email = "",
+            role = "Stub", salary = Money.fromString("0.00"), paymentDay = 1
+        )
+    }
 
     private fun makeService(
         repo: TransactionRepository = mockk(relaxed = true),
@@ -32,7 +42,10 @@ class TransactionOriginTest {
             costCenterRepository = mockk(relaxed = true),
             auditRepository      = mockk(relaxed = true),
             timelineRepository   = mockk(relaxed = true),
-            sessionManager       = session
+            sessionManager       = session,
+            ledgerService        = mockk(relaxed = true),
+            employeeRepository   = stubEmployeeRepo(),
+            paymentRepository    = mockk(relaxed = true)
         )
     }
 

@@ -47,6 +47,8 @@ class RecordPaymentDualWriteTest {
             auditRepository      = mockk(relaxed = true),
             timelineRepository   = mockk(relaxed = true),
             sessionManager       = session,
+            ledgerService        = mockk(relaxed = true),
+            employeeRepository   = mockk(relaxed = true),
             paymentRepository    = paymentRepo
         )
     }
@@ -193,35 +195,6 @@ class RecordPaymentDualWriteTest {
         makeService(repo, paymentRepo).recordPayment(1, paymentDate, Money.fromString("1000.00"))
 
         assertTrue(slot.captured.idempotencyKey != null, "idempotencyKey deve ser preenchida")
-    }
-
-    // ── sem paymentRepository: comportamento legado preservado ───────────────
-
-    @Test
-    fun `sem paymentRepository recordPayment funciona sem dual-write`() {
-        val repo = mockk<TransactionRepository>()
-        every { repo.findById(1) } returns expense()
-        every { repo.update(any()) } just Runs
-
-        val session = mockk<SessionManager>()
-        every { session.currentUser } returns MutableStateFlow(null)
-        every { session.hasPermission(any()) } returns true
-
-        val service = TransactionService(
-            repository           = repo,
-            accountRepository    = mockk(relaxed = true),
-            supplierRepository   = mockk(relaxed = true),
-            costCenterRepository = mockk(relaxed = true),
-            auditRepository      = mockk(relaxed = true),
-            timelineRepository   = mockk(relaxed = true),
-            sessionManager       = session
-            // paymentRepository = null (default)
-        )
-
-        service.recordPayment(1, paymentDate, Money.fromString("1000.00"))
-
-        verify(exactly = 1) { repo.update(any()) }
-        verify(exactly = 0) { repo.updateWithPayment(any(), any()) }
     }
 
     // ── atomicidade: falha em updateWithPayment propaga sem efeito colateral ──

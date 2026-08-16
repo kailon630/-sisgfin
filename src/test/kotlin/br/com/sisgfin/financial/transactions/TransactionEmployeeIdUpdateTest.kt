@@ -1,8 +1,11 @@
 package br.com.sisgfin.financial.transactions
 
+import br.com.sisgfin.Employee
+import br.com.sisgfin.EmployeeRepository
 import br.com.sisgfin.FinancialAccount
 import br.com.sisgfin.FinancialAccountRepository
 import br.com.sisgfin.SessionManager
+import br.com.sisgfin.financial.payments.TransactionPaymentRepository
 import br.com.sisgfin.Supplier
 import br.com.sisgfin.SupplierRepository
 import br.com.sisgfin.financial.money.Money
@@ -20,6 +23,13 @@ import kotlin.test.assertNull
  */
 class TransactionEmployeeIdUpdateTest {
 
+    private fun stubEmployeeRepo() = mockk<EmployeeRepository>().also {
+        every { it.getById(any()) } returns Employee(
+            name = "Stub", document = "00000000000", phone = "", email = "",
+            role = "Stub", salary = Money.fromString("0.00"), paymentDay = 1
+        )
+    }
+
     private fun makeService(
         repo: TransactionRepository = mockk(relaxed = true),
         accountRepo: FinancialAccountRepository = mockk(relaxed = true)
@@ -34,7 +44,10 @@ class TransactionEmployeeIdUpdateTest {
             costCenterRepository = mockk(relaxed = true),
             auditRepository      = mockk(relaxed = true),
             timelineRepository   = mockk(relaxed = true),
-            sessionManager       = session
+            sessionManager       = session,
+            ledgerService        = mockk(relaxed = true),
+            employeeRepository   = stubEmployeeRepo(),
+            paymentRepository    = mockk(relaxed = true)
         )
     }
 
@@ -143,7 +156,10 @@ class TransactionEmployeeIdUpdateTest {
                 every { s.currentUser } returns MutableStateFlow(null)
                 every { s.hasPermission(any()) } returns true
                 s
-            }
+            },
+            ledgerService        = mockk(relaxed = true),
+            employeeRepository   = mockk(relaxed = true),
+            paymentRepository    = mockk(relaxed = true)
         )
 
         service.update(existing.copy(supplierId = 9, employeeId = null))

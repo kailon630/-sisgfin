@@ -68,6 +68,8 @@ class ReconciliationTest {
             auditRepository      = mockk(relaxed = true),
             timelineRepository   = mockk(relaxed = true),
             sessionManager       = session,
+            ledgerService        = mockk(relaxed = true),
+            employeeRepository   = mockk(relaxed = true),
             paymentRepository    = paymentRepo
         )
     }

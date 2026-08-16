@@ -33,9 +33,9 @@ class TransactionService(
     private val auditRepository: AuditRepository,
     private val timelineRepository: TransactionTimelineRepository,
     private val sessionManager: SessionManager,
-    private val ledgerService: LedgerService = LedgerService(),
-    private val employeeRepository: EmployeeRepository? = null,
-    private val paymentRepository: TransactionPaymentRepository? = null
+    private val ledgerService: LedgerService,
+    private val employeeRepository: EmployeeRepository,
+    private val paymentRepository: TransactionPaymentRepository
 ) : CrudOperations<Transaction> {
 
     var listFilter: TransactionListFilter = TransactionListFilter.All
@@ -431,7 +431,7 @@ class TransactionService(
         val newPrincipalPaid  = newPaidAmount - newInterestAmount - newFineAmount
 
         // D3(a): desconto conta para quitação — verifica saldo histórico de desconto se houver
-        val totalDiscount = if (!discountAmount.isZero() && paymentRepository != null) {
+        val totalDiscount = if (!discountAmount.isZero()) {
             paymentRepository.sumDiscountByTransaction(id) + discountAmount
         } else {
             discountAmount
@@ -459,23 +459,19 @@ class TransactionService(
 
         // M2 (atômico): C-15 — update do título e insert da baixa no mesmo transaction {}.
         val userId = sessionManager.currentUser.value?.id
-        if (paymentRepository != null) {
-            val payment = TransactionPayment(
-                transactionId   = id,
-                paymentDate     = paymentDate.toLocalDate(),
-                accountId       = existing.accountId,
-                principalAmount = paidAmount,
-                interestAmount  = juros,
-                fineAmount      = multa,
-                discountAmount  = discountAmount,
-                idempotencyKey  = buildIdempotencyKey(id, paymentDate, paidAmount, juros, multa, discountAmount, userId),
-                createdBy       = userId,
-                createdAt       = LocalDateTime.now()
-            )
-            repository.updateWithPayment(updated, payment)
-        } else {
-            repository.update(updated)
-        }
+        val payment = TransactionPayment(
+            transactionId   = id,
+            paymentDate     = paymentDate.toLocalDate(),
+            accountId       = existing.accountId,
+            principalAmount = paidAmount,
+            interestAmount  = juros,
+            fineAmount      = multa,
+            discountAmount  = discountAmount,
+            idempotencyKey  = buildIdempotencyKey(id, paymentDate, paidAmount, juros, multa, discountAmount, userId),
+            createdBy       = userId,
+            createdAt       = LocalDateTime.now()
+        )
+        repository.updateWithPayment(updated, payment)
 
         ledgerService.recordPayment(updated, cashThisBaixa, paymentDate)
 
@@ -788,7 +784,7 @@ class TransactionService(
     }
 
     private fun validateEmployee(employeeId: Int?) {
-        if (employeeId == null || employeeRepository == null) return
+        if (employeeId == null) return
         val employee = employeeRepository.getById(employeeId)
             ?: throw IllegalArgumentException("Funcionário não encontrado.")
         if (!employee.active) {

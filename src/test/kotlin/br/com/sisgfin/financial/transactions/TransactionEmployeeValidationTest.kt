@@ -7,6 +7,7 @@ import br.com.sisgfin.FinancialAccountRepository
 import br.com.sisgfin.SessionManager
 import br.com.sisgfin.Supplier
 import br.com.sisgfin.SupplierRepository
+import br.com.sisgfin.financial.payments.TransactionPaymentRepository
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.suppliers.EntityType
 import io.mockk.*
@@ -40,7 +41,9 @@ class TransactionEmployeeValidationTest {
             auditRepository      = mockk(relaxed = true),
             timelineRepository   = mockk(relaxed = true),
             sessionManager       = session,
-            employeeRepository   = employeeRepo
+            ledgerService        = mockk(relaxed = true),
+            employeeRepository   = employeeRepo,
+            paymentRepository    = mockk(relaxed = true)
         )
     }
 
