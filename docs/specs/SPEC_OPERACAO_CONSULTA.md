@@ -172,40 +172,31 @@ Quando `PAYMENT` for selecionado, forçar `statuses = {PAID}` e sinalizar isso n
 
 ---
 
-## F5 — Beneficiário unificado (destrava F2)
+## F5 — Seletor de beneficiário: chips `Fornecedor | Funcionário`
 
-**Origem:** R1 achados 1 e 2 — o painel não resolve `employeeId` para nome; 4/4 lançamentos da base são só-funcionário.
+> **Decisão de produto (2026-08-15):** o select unificado com busca mista foi substituído por chips alternando a fonte. Um lançamento tem `supplierId` **ou** `employeeId`, nunca ambos. Especificação original de select unificado com precedência `employeeId > supplierId` não se aplica.
 
-### Camada de leitura
+**Origem:** R1 achados 1 e 2 — o painel não resolve `employeeId` para nome; lançamentos de folha ficavam sem nome visível.
 
-Criar `CounterpartyResolver` (ou método em `TransactionService`) que, dado um `Transaction`, devolve:
+### Implementado (T-08, T-09, T-13, T-14)
 
-```kotlin
-data class CounterpartyRef(
-    val id: Int,
-    val kind: CounterpartyKind,  // SUPPLIER | EMPLOYEE
-    val name: String,
-    val document: String?,
-    val isActive: Boolean,
-)
-```
+**Camada de leitura:** `CounterpartyResolver` já existe e resolve `supplierId → employeeId` (precedência real, inversa à que o SPEC anterior afirmava). `CounterpartyMap.nameFor()` usa `supplierId` primeiro, depois `employeeId` como fallback.
 
-Regra: `employeeId` tem precedência sobre `supplierId` quando ambos existem. Nenhum dos dois → `null`, célula exibe `—`.
+**Camada de escrita:** chips `Fornecedor | Funcionário` no painel de detalhes:
+- Chip `Fornecedor` (ou `Cliente` em lançamentos de receita) — mostra select de fornecedores/clientes
+- Chip `Funcionário` — aparece apenas em despesas (EXPENSE); mostra select de funcionários ativos
+- Alternar o chip limpa o id do lado oposto
+- O service (T-14) garante exclusividade mútua: gravar `employeeId` zera `supplierId` e vice-versa
 
-**Carregar em lote**, não por linha. Um `Map<Int, String>` de funcionários e outro de fornecedores, montados junto com `loadReferenceData()`.
+**`TransactionRepository.update` agora persiste `employeeId`** (T-14). Proteção contra edição em lançamentos de folha mantida via `origin` (T-13): `PAYROLL_ENGINE` e `PAYROLL_IMPORT` rejeitam mudança de `employeeId`.
 
-### Camada de escrita
+**Funcionário inativo rejeitado** (T-09): `validateEmployee()` no serviço, análoga à RN-02 para fornecedores.
 
-Campo único **BENEFICIÁRIO** no painel de detalhes, substituindo o atual `CLIENTE / FORNECEDOR`:
-- busca digitando, com resultados de ambos os cadastros
-- badge na opção indicando origem (`Fornecedor` / `Funcionário`)
-- grava em `supplierId` **ou** `employeeId`, zerando o outro
-- inativos não aparecem na busca, mas são exibidos (com marca) se já vinculados
+**Discriminador de origem** (T-13): coluna `origin` em `financial_transactions`. `cancelPendingPayrollForMonth` filtra apenas `origin IN (PAYROLL_ENGINE, PAYROLL_IMPORT)` — lançamentos MANUAL com `employeeId` não são cancelados pela importação de folha.
 
-**Atenção:** hoje `TransactionRepository.update` deliberadamente **não** atualiza `employeeId` (R1 §2.2). Ao permitir edição, esse comportamento precisa mudar — e a mudança deve ser explícita, com teste, porque hoje é o que protege os lançamentos de folha.
+### Funcionário aparece em receita?
 
-### Pendência de negócio (registrar, não resolver agora)
-R7.3: não há validação de funcionário inativo nem data de desligamento. Com o campo unificado, o operador poderá vincular funcionário desligado. Adicionar validação análoga à RN-02 para `employeeId`.
+Não. Chip `Funcionário` só aparece para `type == EXPENSE`. Funcionários não geram receita para a organização; seu vínculo com lançamentos é sempre de custo (salário, adiantamento, reembolso de despesa). Receitas têm apenas chip `Cliente`.
 
 ---
 

@@ -489,19 +489,19 @@ _Mova os cards aqui quando começar._
 
 ---
 
-#### Seletor de credor no lançamento — bloco em preparação
+#### Seletor de credor no lançamento — concluído
 
 > Funcionários PJ permanecem em `employees`; um lançamento tem fornecedor **ou** funcionário, nunca ambos.
 
-- [ ] **T-13** — discriminador de origem do lançamento (`origin`: MANUAL / PAYROLL_ENGINE / PAYROLL_IMPORT / RECURRENCE / OFX) — **pré-requisito duro**: `cancelPendingPayrollForMonth` filtra só por `employeeId` + status cancelável + janela de `dueDate`, sem distinguir origem (`TransactionService.kt:536`, `TransactionRepository.kt:820-837`). Com o seletor, a importação de folha cancelaria lançamentos manuais do mesmo funcionário no mês. Exige migração + backfill (tudo que hoje tem `employeeId` é de folha)
-- [ ] **T-14** — permitir `update` de `employeeId`, com teste — hoje `TransactionRepository.kt:268` deliberadamente não atualiza o campo (proteção dos lançamentos de folha); `SPEC_OPERACAO_CONSULTA.md` exige que a mudança seja explícita e testada — **pré-requisito duro**
-- [ ] **T-08** — chips `Fornecedor | Funcionário` + select único que troca de fonte no `TransactionDetailsPanel`; alternar o chip limpa o id do outro lado
+- [x] **T-13** — discriminador de origem (`origin` enum, V30; backfill por `employeeId`; `cancelPendingPayrollForMonth` filtra PAYROLL_ENGINE/PAYROLL_IMPORT) — `1d26aa7`
+- [x] **T-14** — `update` persiste `employeeId`; guard bloqueia alteração em origens de folha; exclusividade mútua supplierId/employeeId — `f300c2a`
+- [x] **T-08** — chips `Fornecedor | Funcionário` em `TransactionDetailsPanel`; alternar chip limpa id do outro lado; chip de funcionário só aparece em EXPENSE — `15007e9`
+- [x] **T-09** — `validateEmployee()` em `TransactionService`; funcionário inativo bloqueado análogo à RN-02 — `15007e9`
+- [x] **T-10** — UNIQUE em `employees.document` (V31); verificação cruzada CPF/CNPJ entre `employees` e `suppliers` — `60e15a5`
+- [x] **T-15** — `EmploymentType` grava `.name`; V31 normaliza dados existentes; `EmployeesScreen` resolve por `.name` com fallback `.label` — `60e15a5`
 - [ ] **T-07** — exibir beneficiário no Resumo quando só há `employeeId` — hoje `supplierName = suppliers.find { it.id == item.supplierId }?.name` (`TransactionDetailsPanel.kt:95`), linha "Fornecedor" some; origem R1.1
-- [ ] **T-09** — validação de funcionário inativo, análoga à RN-02 — não existe `validateEmployee` em `TransactionService`; origem R1.4 / R7.3
-- [ ] **T-10** — UNIQUE em `employees.document` + verificação cruzada com `suppliers` — hoje só `suppliers` tem UNIQUE (V11); `employees` não tem índice nem constraint; `DocumentValidator.normalize()` já existe e serve para a comparação
-- [ ] **T-15** — normalizar `EmploymentType` para gravar `.name` em vez de `.label` — hoje persiste `"Estágio"` (com acento) enquanto `EntityType` grava `.name`; comparação por string acentuada é frágil se a regra documental derivar do vínculo
-
-> **Ponto aberto:** `SPEC_OPERACAO_CONSULTA.md` (F5) especifica um select único "BENEFICIÁRIO" com busca unificada e badge de origem, e define precedência `employeeId > supplierId`. A decisão do dono do produto é por **chips alternando a fonte**, sem coexistência. Além disso, o `CounterpartyMap.nameFor()` já implementado usa a precedência **inversa** (`supplierId → employeeId`). O SPEC precisa ser atualizado para refletir a decisão.
+- [ ] **C-16** — `PayrollImportService.findByCpf()` não filtra funcionários inativos; pode vincular folha importada a funcionário desligado — gap identificado no bloco seletor-credor
+- [ ] **S-08** — revalidar `CounterpartyMap.nameFor()` no Livro Diário após virar o seletor de credor: precedência agora é `supplierId → employeeId` (inversa do SPEC antigo); SPEC F5 atualizado em `seletor-credor`
 
 #### Conformidade TCESP restante
 
