@@ -1,6 +1,7 @@
 package br.com.sisgfin
 
 import br.com.sisgfin.core.crud.CrudOperations
+import br.com.sisgfin.core.validation.DocumentValidator
 import br.com.sisgfin.employees.PayrollEngine
 import br.com.sisgfin.employees.PayrollGenerationResult
 
@@ -15,17 +16,18 @@ class EmployeeService(
     override fun listAll(): List<Employee> = repository.getAll()
 
     override fun save(employee: Employee) {
-        if (employee.id == 0) {
-            val newId = repository.insert(employee)
-            lastPayrollResult = if (employee.effectivePaymentDays().isNotEmpty())
+        val emp = employee.copy(document = DocumentValidator.normalize(employee.document))
+        if (emp.id == 0) {
+            val newId = repository.insert(emp)
+            lastPayrollResult = if (emp.effectivePaymentDays().isNotEmpty())
                 payrollEngine.generateForEmployee(newId)
             else emptyList()
         } else {
-            val existing = repository.getById(employee.id)
-            repository.update(employee)
-            val paymentDaysChanged = existing?.effectivePaymentDays() != employee.effectivePaymentDays()
-            lastPayrollResult = if (paymentDaysChanged && employee.effectivePaymentDays().isNotEmpty())
-                payrollEngine.generateForEmployee(employee.id)
+            val existing = repository.getById(emp.id)
+            repository.update(emp)
+            val paymentDaysChanged = existing?.effectivePaymentDays() != emp.effectivePaymentDays()
+            lastPayrollResult = if (paymentDaysChanged && emp.effectivePaymentDays().isNotEmpty())
+                payrollEngine.generateForEmployee(emp.id)
             else emptyList()
         }
     }

@@ -1,5 +1,6 @@
 package br.com.sisgfin
 
+import br.com.sisgfin.core.validation.DocumentValidator
 import br.com.sisgfin.financial.money.toMoney
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -30,6 +31,17 @@ class EmployeeRepository {
     }
 
     fun insert(employee: Employee) = transaction {
+        val normalizedDoc = DocumentValidator.normalize(employee.document)
+        val conflictingSupplier = Suppliers.selectAll()
+            .where { Suppliers.document eq normalizedDoc }
+            .map { it[Suppliers.name] }
+            .firstOrNull()
+        if (conflictingSupplier != null) {
+            throw IllegalArgumentException(
+                "CPF/CNPJ já cadastrado como fornecedor/cliente: \"$conflictingSupplier\". " +
+                "Não é possível duplicar o mesmo documento entre as tabelas de funcionários e fornecedores."
+            )
+        }
         Employees.insert {
             it[name]           = employee.name
             it[document]       = employee.document
@@ -52,6 +64,17 @@ class EmployeeRepository {
     }
 
     fun update(employee: Employee) = transaction {
+        val normalizedDoc = DocumentValidator.normalize(employee.document)
+        val conflictingSupplier = Suppliers.selectAll()
+            .where { Suppliers.document eq normalizedDoc }
+            .map { it[Suppliers.name] }
+            .firstOrNull()
+        if (conflictingSupplier != null) {
+            throw IllegalArgumentException(
+                "CPF/CNPJ já cadastrado como fornecedor/cliente: \"$conflictingSupplier\". " +
+                "Não é possível duplicar o mesmo documento entre as tabelas de funcionários e fornecedores."
+            )
+        }
         Employees.update({ Employees.id eq employee.id }) {
             it[name]           = employee.name
             it[document]       = employee.document

@@ -42,6 +42,16 @@ class SupplierRepository : MutableEntityRepository<Supplier> {
     }
 
     override fun insert(supplier: Supplier): Int = transaction {
+        val conflictingEmployee = Employees.selectAll()
+            .where { Employees.document eq supplier.document }
+            .map { it[Employees.name] }
+            .firstOrNull()
+        if (conflictingEmployee != null) {
+            throw IllegalArgumentException(
+                "CPF/CNPJ já cadastrado como funcionário: \"$conflictingEmployee\". " +
+                "Não é possível duplicar o mesmo documento entre as tabelas de fornecedores e funcionários."
+            )
+        }
         Suppliers.insert {
             it[document] = supplier.document
             it[name] = supplier.name
@@ -61,6 +71,16 @@ class SupplierRepository : MutableEntityRepository<Supplier> {
 
     override fun update(supplier: Supplier) {
         transaction {
+            val conflictingEmployee = Employees.selectAll()
+                .where { Employees.document eq supplier.document }
+                .map { it[Employees.name] }
+                .firstOrNull()
+            if (conflictingEmployee != null) {
+                throw IllegalArgumentException(
+                    "CPF/CNPJ já cadastrado como funcionário: \"$conflictingEmployee\". " +
+                    "Não é possível duplicar o mesmo documento entre as tabelas de fornecedores e funcionários."
+                )
+            }
             Suppliers.update({ Suppliers.id eq supplier.id }) {
                 it[document] = supplier.document
                 it[name] = supplier.name

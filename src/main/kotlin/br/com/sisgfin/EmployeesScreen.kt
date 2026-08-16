@@ -150,7 +150,7 @@ fun EmployeeRow(
     ) {
         Column(modifier = Modifier.weight(2f)) {
             Text(employee.name, style = MaterialTheme.typography.bodyLarge)
-            val empType = EmploymentType.entries.firstOrNull { it.label == employee.employmentType }
+            val empType = EmploymentType.entries.firstOrNull { it.name == employee.employmentType || it.label == employee.employmentType }
             if (empType != null) {
                 Text(empType.label, style = MaterialTheme.typography.labelSmall, color = WsTextSecondary)
             }
@@ -221,7 +221,7 @@ fun EmployeeEditorPanel(viewModel: EmployeeViewModel, onClose: () -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
     val employee = uiState.selectedItem ?: return
 
-    val initialType = EmploymentType.entries.firstOrNull { it.label == employee.employmentType }
+    val initialType = EmploymentType.entries.firstOrNull { it.name == employee.employmentType || it.label == employee.employmentType }
         ?: EmploymentType.CLT
 
     var selectedType    by remember(employee.id) { mutableStateOf(initialType) }
@@ -290,7 +290,7 @@ fun EmployeeEditorPanel(viewModel: EmployeeViewModel, onClose: () -> Unit) {
                     salary         = salary.centsToMoney(),
                     paymentDay     = selectedPaymentDays.minOrNull() ?: employee.paymentDay,
                     paymentDays    = selectedPaymentDays.sorted().joinToString(",").ifEmpty { null },
-                    employmentType = selectedType.label,
+                    employmentType = selectedType.name,
                     bankCode       = bankCode,
                     agencyNumber   = agencyNumber.ifBlank { null },
                     agencyDv       = agencyDv.ifBlank { null },
@@ -446,7 +446,7 @@ private fun DayPickerChips(
 fun EmployeePopup(employee: Employee?, onSave: (Employee) -> Unit, onCancel: () -> Unit) {
     if (employee == null) return
 
-    val initialType = EmploymentType.entries.firstOrNull { it.label == employee.employmentType }
+    val initialType = EmploymentType.entries.firstOrNull { it.name == employee.employmentType || it.label == employee.employmentType }
         ?: EmploymentType.CLT
 
     var selectedType by remember(employee.id) { mutableStateOf(initialType) }
