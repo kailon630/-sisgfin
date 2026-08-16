@@ -12,6 +12,8 @@ import br.com.sisgfin.core.crud.CrudOperations
 import br.com.sisgfin.financial.ledger.LedgerService
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.RoundingPolicy
+import br.com.sisgfin.financial.payments.TransactionPayment
+import br.com.sisgfin.financial.payments.TransactionPaymentRepository
 import br.com.sisgfin.financial.transactions.timeline.TimelineEventType
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -32,7 +34,8 @@ class TransactionService(
     private val timelineRepository: TransactionTimelineRepository,
     private val sessionManager: SessionManager,
     private val ledgerService: LedgerService = LedgerService(),
-    private val employeeRepository: EmployeeRepository? = null
+    private val employeeRepository: EmployeeRepository? = null,
+    private val paymentRepository: TransactionPaymentRepository? = null
 ) : CrudOperations<Transaction> {
 
     var listFilter: TransactionListFilter = TransactionListFilter.All
@@ -398,7 +401,8 @@ class TransactionService(
         paymentDate: LocalDateTime,
         paidAmount: Money,
         interestAmount: Money? = null,
-        fineAmount: Money? = null
+        fineAmount: Money? = null,
+        discountAmount: Money = Money.ZERO
     ) {
         requirePermission(Permission.ConfirmPayment)
         val existing = repository.findById(id)
@@ -419,15 +423,24 @@ class TransactionService(
             issueDate   = existing.issueDate
         )
 
-        // Acumula sobre o que já existe — paidAmount armazena (principal + juros + multa) cumulativos
+        // Acumula sobre o que já existe — paidAmount armazena (principal + juros + multa) cumulativos.
+        // discountAmount NÃO entra em paidAmount (dual-write mantém semântica atual para leituras).
         val newPaidAmount     = (existing.paidAmount     ?: Money.ZERO) + paidAmount + juros + multa
         val newInterestAmount = (existing.interestAmount ?: Money.ZERO) + juros
         val newFineAmount     = (existing.fineAmount     ?: Money.ZERO) + multa
         val newPrincipalPaid  = newPaidAmount - newInterestAmount - newFineAmount
 
+        // D3(a): desconto conta para quitação — verifica saldo histórico de desconto se houver
+        val totalDiscount = if (!discountAmount.isZero() && paymentRepository != null) {
+            paymentRepository.sumDiscountByTransaction(id) + discountAmount
+        } else {
+            discountAmount
+        }
+        val principalQuitado = newPrincipalPaid + totalDiscount
+
         val newStatus = TransactionStateMachine.resolveStatusAfterPayment(
             existing.amount.value,
-            newPrincipalPaid.value
+            principalQuitado.value
         )
         TransactionStateMachine.assertTransition(existing.status, newStatus)
 
@@ -443,7 +456,28 @@ class TransactionService(
             updatedAt      = LocalDateTime.now()
         )
         TransactionValidator.validateForSave(updated, existing)
+
+        // M2: dual-write — atualiza o título e insere a baixa.
+        // Nota: as duas escritas são sequenciais (não atômicas) — plena atomicidade requer
+        // refatorar para o padrão C-15 (updateWithPayment no repositório), o que exigiria
+        // modificar os testes CARACTERIZACAO existentes (fora do escopo deste bloco).
+        val userId = sessionManager.currentUser.value?.id
         repository.update(updated)
+        if (paymentRepository != null) {
+            val payment = TransactionPayment(
+                transactionId   = id,
+                paymentDate     = paymentDate.toLocalDate(),
+                accountId       = existing.accountId,
+                principalAmount = paidAmount,
+                interestAmount  = juros,
+                fineAmount      = multa,
+                discountAmount  = discountAmount,
+                idempotencyKey  = buildIdempotencyKey(id, paymentDate, paidAmount, juros, multa, discountAmount, userId),
+                createdBy       = userId,
+                createdAt       = LocalDateTime.now()
+            )
+            paymentRepository.insertOrIgnore(payment)
+        }
 
         ledgerService.recordPayment(updated, cashThisBaixa, paymentDate)
 
@@ -463,6 +497,16 @@ class TransactionService(
         audit(auditAction, id, auditDetail(newStatus, existing.status, cashThisBaixa))
         audit("TRANSACTION_STATUS_CHANGED", id, auditDetail(newStatus, existing.status, cashThisBaixa))
     }
+
+    private fun buildIdempotencyKey(
+        transactionId: Int,
+        paymentDate: LocalDateTime,
+        principal: Money,
+        interest: Money,
+        fine: Money,
+        discount: Money,
+        userId: Int?
+    ): String = "$transactionId:${paymentDate.toLocalDate()}:${principal.value}:${interest.value}:${fine.value}:${discount.value}:${userId ?: "anon"}"
 
     fun markAsPaid(id: Int, paymentDate: LocalDateTime = LocalDateTime.now()) {
         requirePermission(Permission.ConfirmPayment)

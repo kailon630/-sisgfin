@@ -40,7 +40,8 @@ val serviceModule = module {
             get(), // TransactionTimelineRepository
             get(), // SessionManager
             get(), // LedgerService
-            get()  // EmployeeRepository
+            get(), // EmployeeRepository
+            get()  // TransactionPaymentRepository
         )
     }
     single { OfxParser() }
