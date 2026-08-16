@@ -5,6 +5,7 @@ import br.com.sisgfin.core.domain.MutableEntityRepository
 import br.com.sisgfin.core.validation.DocumentValidator
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.MoneyFormatter
+import br.com.sisgfin.financial.payments.TransactionPaymentRepository
 import br.com.sisgfin.financial.transactions.TransactionRepository
 import br.com.sisgfin.financial.transactions.TransactionType
 
@@ -42,6 +43,7 @@ class SupplierService(
 class FinancialAccountService(
     private val accountRepository: FinancialAccountRepository,
     private val transactionRepository: TransactionRepository,
+    private val paymentRepository: TransactionPaymentRepository,
     auditRepository: AuditRepository,
     sessionManager: SessionManager
 ) : AuditedCrudService<FinancialAccount>(
@@ -54,33 +56,29 @@ class FinancialAccountService(
     withActiveFlag = { item, active -> item.copy(isActive = active) },
     isActive = { it.isActive }
 ) {
-    // RN-04 + RN-06 + C1: saldo com estorno dirigido por reversed_type
+    // RN-04 + RN-06 + C1: saldo via cashEffective das baixas (M4)
     fun calculateBalance(accountId: Int): Money {
         val account = accountRepository.findById(accountId) ?: return Money.ZERO
-        val income         = transactionRepository.sumPaid(accountId, TransactionType.INCOME)
-        val expense        = transactionRepository.sumPaid(accountId, TransactionType.EXPENSE)
-        val adjustment     = transactionRepository.sumPaid(accountId, TransactionType.ADJUSTMENT)
+        val income         = paymentRepository.sumCashEffectiveByAccountAndType(accountId, TransactionType.INCOME)
+        val expense        = paymentRepository.sumCashEffectiveByAccountAndType(accountId, TransactionType.EXPENSE)
+        val adjustment     = paymentRepository.sumCashEffectiveByAccountAndType(accountId, TransactionType.ADJUSTMENT)
         val transferIn     = transactionRepository.sumPaidTransferIn(accountId)
         val transferOut    = transactionRepository.sumPaidTransferOut(accountId)
-        val incomePartial  = transactionRepository.sumPartialPaid(accountId, TransactionType.INCOME)
-        val expensePartial = transactionRepository.sumPartialPaid(accountId, TransactionType.EXPENSE)
-        val reversalCredit = transactionRepository.sumPaidReversalOf(
+        val reversalCredit = paymentRepository.sumCashEffectiveForReversalOf(
             accountId, listOf(TransactionType.EXPENSE)
         )
-        val reversalDebit = transactionRepository.sumPaidReversalOf(
+        val reversalDebit  = paymentRepository.sumCashEffectiveForReversalOf(
             accountId, listOf(TransactionType.INCOME, TransactionType.ADJUSTMENT)
         )
         return br.com.sisgfin.financial.accounts.AccountBalanceFormula.compute(
             initialBalance = account.initialBalance,
-            income = income,
-            incomePartial = incomePartial,
-            expense = expense,
-            expensePartial = expensePartial,
-            adjustment = adjustment,
-            transferIn = transferIn,
-            transferOut = transferOut,
+            income         = income,
+            expense        = expense,
+            adjustment     = adjustment,
+            transferIn     = transferIn,
+            transferOut    = transferOut,
             reversalCredit = reversalCredit,
-            reversalDebit = reversalDebit
+            reversalDebit  = reversalDebit
         )
     }
 

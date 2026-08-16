@@ -2,6 +2,9 @@ package br.com.sisgfin.financial.payments
 
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.toMoney
+import br.com.sisgfin.financial.transactions.FinancialTransactionsTable
+import br.com.sisgfin.financial.transactions.TransactionStatus
+import br.com.sisgfin.financial.transactions.TransactionType
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.math.BigDecimal
@@ -79,6 +82,77 @@ class TransactionPaymentRepository {
             }
             .fold(BigDecimal.ZERO) { acc, row ->
                 acc + row[TransactionPaymentsTable.discountAmount]
+            }
+            .toMoney()
+    }
+
+    /**
+     * M4 — saldo via cashEffective das baixas.
+     * Soma principal + juros + multa − desconto de baixas ativas para
+     * a combinação conta × tipo, cobrindo PAID e PARTIAL em conjunto.
+     */
+    fun sumCashEffectiveByAccountAndType(accountId: Int, type: TransactionType): Money = transaction {
+        TransactionPaymentsTable
+            .join(FinancialTransactionsTable, JoinType.INNER,
+                onColumn = TransactionPaymentsTable.transactionId,
+                otherColumn = FinancialTransactionsTable.id)
+            .select(
+                TransactionPaymentsTable.principalAmount,
+                TransactionPaymentsTable.interestAmount,
+                TransactionPaymentsTable.fineAmount,
+                TransactionPaymentsTable.discountAmount
+            )
+            .where {
+                (FinancialTransactionsTable.accountId eq accountId) and
+                (FinancialTransactionsTable.type eq type.name) and
+                (FinancialTransactionsTable.isActive eq true) and
+                TransactionPaymentsTable.reversedById.isNull()
+            }
+            .fold(BigDecimal.ZERO) { acc, row ->
+                acc +
+                row[TransactionPaymentsTable.principalAmount] +
+                row[TransactionPaymentsTable.interestAmount] +
+                row[TransactionPaymentsTable.fineAmount] -
+                row[TransactionPaymentsTable.discountAmount]
+            }
+            .toMoney()
+    }
+
+    /**
+     * M4 — crédito/débito de estorno via cashEffective original.
+     * Para cada REVERSAL em status PAID na conta, soma o cashEffective das baixas
+     * do título original (via parent_transaction_id), em vez de usar amount do estorno.
+     */
+    fun sumCashEffectiveForReversalOf(
+        accountId: Int,
+        originalTypes: List<TransactionType>
+    ): Money = transaction {
+        if (originalTypes.isEmpty()) return@transaction Money.ZERO
+        TransactionPaymentsTable
+            .join(FinancialTransactionsTable, JoinType.INNER,
+                additionalConstraint = {
+                    TransactionPaymentsTable.transactionId eq FinancialTransactionsTable.parentTransactionId
+                })
+            .select(
+                TransactionPaymentsTable.principalAmount,
+                TransactionPaymentsTable.interestAmount,
+                TransactionPaymentsTable.fineAmount,
+                TransactionPaymentsTable.discountAmount
+            )
+            .where {
+                (FinancialTransactionsTable.accountId eq accountId) and
+                (FinancialTransactionsTable.type eq TransactionType.REVERSAL.name) and
+                (FinancialTransactionsTable.status eq TransactionStatus.PAID.name) and
+                (FinancialTransactionsTable.isActive eq true) and
+                (FinancialTransactionsTable.reversedType inList originalTypes.map { it.name }) and
+                TransactionPaymentsTable.reversedById.isNull()
+            }
+            .fold(BigDecimal.ZERO) { acc, row ->
+                acc +
+                row[TransactionPaymentsTable.principalAmount] +
+                row[TransactionPaymentsTable.interestAmount] +
+                row[TransactionPaymentsTable.fineAmount] -
+                row[TransactionPaymentsTable.discountAmount]
             }
             .toMoney()
     }

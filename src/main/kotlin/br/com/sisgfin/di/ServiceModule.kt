@@ -22,7 +22,7 @@ val serviceModule = module {
     single { UserManagementService(get(), get(), get()) }
     single { EmployeeService(get(), get()) }
     single { SupplierService(get(), get(), get()) }
-    single { FinancialAccountService(get(), get(), get(), get()) }
+    single { FinancialAccountService(get(), get(), get(), get(), get()) }
     single { CostCenterService(get(), get(), get(), get()) }
     single { ExpenseCategoryService(get(), get(), get(), get()) }
     single { BudgetItemService(get(), get(), get(), get()) }

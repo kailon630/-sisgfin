@@ -20,9 +20,10 @@ import kotlin.test.assertTrue
  * C-14 / Bloco 1 — caracterização de TransactionService.recordPayment().
  *
  * Todos os testes exercitam o service REAL com repositórios mockados.
- * Dois testes CARACTERIZACAO documentam comportamento incorreto que será
- * corrigido no épico E2. Quando quebrarem, é sinal de sucesso — inverta as
- * asserções conforme comentário em cada teste.
+ * Os testes P0-5 documentavam comportamento incorreto do calculateBalance.
+ * calculateBalance foi corrigido no M4 (usa cashEffective das baixas).
+ * As asserções sobre amount=1000 permanecem corretas: o campo face value
+ * não muda — o que mudou foi o que calculateBalance usa para o saldo.
  */
 class RecordPaymentIntegrationTest {
 
@@ -288,13 +289,11 @@ class RecordPaymentIntegrationTest {
     // ── CARACTERIZAÇÃO — comportamentos incorretos conhecidos ─────────────────
 
     @Test
-    fun `CARACTERIZACAO P0-5 recordPayment com juros nao soma encargos ao saldo`() {
-        // CARACTERIZAÇÃO — comportamento INCORRETO, mantido de propósito.
-        // P0-5: sumPaid() agrega `amount`, não `paidAmount`; juros e multa pagos
-        // nunca saem do saldo. amount permanece 1000 enquanto paidAmount = 1050.
-        // calculateBalance usa SUM(amount) = 1000 — R$50 de juros são invisíveis.
-        // Será corrigido no E2 (C-06 / calculateBalance sobre baixas).
-        // Quando este teste QUEBRAR, é sinal de sucesso: inverta a asserção sobre amount.
+    fun `P0-5 recordPayment com juros grava paidAmount correto e amount permanece face value`() {
+        // P0-5 (corrigido no M4): amount=1000 é o face value e não muda — correto.
+        // paidAmount=1050 é o caixa efetivo (principal + juros) — correto.
+        // calculateBalance agora usa cashEffective das baixas (M4), portanto
+        // R$50 de juros SÃO visíveis no saldo. Nenhum valor errado neste teste.
         val repo = mockk<TransactionRepository>()
         every { repo.findById(1) } returns expense()
         val slot = slot<Transaction>()
@@ -305,23 +304,20 @@ class RecordPaymentIntegrationTest {
             interestAmount = Money.fromString("50.00"))
 
         val updated = slot.captured
-        // paidAmount gravado = 1050 — o armazenamento está correto
+        // paidAmount = principal + juros = 1050 (caixa efetivo, fonte das baixas)
         assertEquals(0, Money.fromString("1050.00").compareTo(updated.paidAmount!!))
-        // amount NÃO muda (1000) — e é exatamente o que sumPaid() agrega para o saldo.
-        // Consequência: saldo cai 1000, não 1050. Os R$50 de juros desaparecem do saldo.
+        // amount permanece o face value do título (1000) — imutável por design
         assertEquals(0, Money.fromString("1000.00").compareTo(updated.amount))
     }
 
     @Test
-    fun `CARACTERIZACAO P0-5 ao quitar PARTIAL os juros da baixa anterior somem do saldo`() {
-        // CARACTERIZAÇÃO — comportamento INCORRETO, mantido de propósito.
-        // Q5d (EncargosNoSaldoTest): ao mudar PARTIAL → PAID, calculateBalance para
-        // de usar SUM(paid_amount) e passa a usar SUM(amount). Os juros acumulados
-        // na 1ª baixa (R$50) desaparecem do saldo nesse momento.
-        // Será corrigido no E2 (C-06). Quando este teste QUEBRAR, é sinal de sucesso.
+    fun `P0-5 ao quitar PARTIAL paidAmount acumula corretamente e amount permanece face value`() {
+        // P0-5 (corrigido no M4): a assimetria PARTIAL→PAID foi eliminada.
+        // calculateBalance usa cashEffective das baixas, não amount nem paidAmount do título.
+        // Cada baixa contribui com seu cashEffective — a transição de status não afeta o saldo.
         //
         // Estado pós-1ª baixa: 300 principal + 50 juros → PARTIAL
-        //   paidAmount = 350, interestAmount = 50, amount = 1000
+        //   paidAmount = 350, interestAmount = 50, amount = 1000 (face value)
         val repo = mockk<TransactionRepository>()
         every { repo.findById(1) } returns expense(
             status         = TransactionStatus.PARTIAL,
@@ -332,16 +328,14 @@ class RecordPaymentIntegrationTest {
         every { repo.updateWithPayment(capture(slot), any()) } returns true
         val service = makeService(repo)
 
-        // 2ª baixa: 700 principal restante (sem novos encargos) → deve virar PAID
+        // 2ª baixa: 700 principal restante → PAID
         service.recordPayment(1, paymentDate, Money.fromString("700.00"))
 
         val updated = slot.captured
         assertEquals(TransactionStatus.PAID, updated.status)
-        // paidAmount acumulado correto: 350 (anterior) + 700 = 1050
+        // paidAmount acumulado: 350 (1ª baixa) + 700 (2ª baixa) = 1050
         assertEquals(0, Money.fromString("1050.00").compareTo(updated.paidAmount!!))
-        // amount permanece 1000 — é o que sumPaid() vai somar para o saldo.
-        // Ao virar PAID, saldo cai 1000 (amount), não 1050 (paidAmount).
-        // Os R$50 de juros da 1ª baixa desaparecem silenciosamente.
+        // amount permanece o face value do título — imutável por design
         assertEquals(0, Money.fromString("1000.00").compareTo(updated.amount))
     }
 

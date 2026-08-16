@@ -6,98 +6,87 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 
 /**
- * P0-5: documenta comportamento ATUAL dos encargos no saldo de conta.
- * Não corrige — serve de baseline para eventual P0-6.
+ * P0-5 (M4): documenta comportamento CORRETO após calculateBalance migrar para cashEffective.
+ * Invertido de EncargosNoSaldoTest pré-M4 — cada teste é a versão corrigida do Q5x anterior.
  *
- * Premissas (após P0-4):
- *   - paidAmount armazena principal + juros + multa acumulados
- *   - calculateBalance usa sumPaid → SUM(amount) para PAID
- *   - calculateBalance usa sumPartialPaid → SUM(paid_amount) para PARTIAL
+ * Premissas (após M4):
+ *   - calculateBalance usa cashEffective das baixas (principal + juros + multa − desconto)
+ *   - PAID e PARTIAL contribuem via baixas; não há separação income/incomePartial no cálculo
  */
 class EncargosNoSaldoTest {
 
     /**
-     * Q5a — título PAID (baixa única): calculateBalance usa amount, não paidAmount.
-     * Cenário: amount=1000, quitado com 1000 principal + 50 juros.
-     * Após P0-4: paidAmount=1050, interestAmount=50, status=PAID.
-     * sumPaid → SUM(amount) = 1000 → expense = 1000, não 1050.
+     * Q5a — título PAID com juros: saldo reflete cashEffective completo.
+     * Cenário: amount=1000, baixa com 1000 principal + 50 juros = cashEffective=1050.
+     * Após M4: calculateBalance usa cashEffective=1050 → expense=1050.
      */
     @Test
-    fun `Q5a titulo PAID baixa unica - calculateBalance usa amount nao paidAmount - juros invisiveis`() {
+    fun `Q5a titulo PAID com juros - calculateBalance usa cashEffective juros visiveis`() {
         val balance = AccountBalanceFormula.compute(
             initialBalance = Money.fromString("10000.00"),
-            expense        = Money.fromString("1000.00") // amount, não paidAmount=1050
+            expense        = Money.fromString("1050.00") // cashEffective: 1000 principal + 50 juros
         )
-        // R$50 de juros pagos são invisíveis ao saldo
-        assertEquals(0, Money.fromString("9000.00").compareTo(balance),
-            "Balance usa amount=1000, não paidAmount=1050 — R$50 de juros desaparecem do saldo")
+        assertEquals(0, Money.fromString("8950.00").compareTo(balance),
+            "cashEffective=1050 reduz saldo em 1050 — juros visíveis")
     }
 
     /**
-     * Q5b — divergência statement vs calculateBalance.
-     * StatementModels.signedAmount usa tx.paidAmount ?: tx.amount = 1050.
-     * calculateBalance usa amount = 1000.
-     * Divergência = 50 (juros).
+     * Q5b — convergência statement vs calculateBalance após M4.
+     * StatementModels.signedAmount usa paidAmount=1050 = cashEffective.
+     * calculateBalance usa cashEffective=1050.
+     * Divergência = 0.
      */
     @Test
-    fun `Q5b statement mostra paidAmount 1050 mas calculateBalance ve amount 1000 - divergencia 50`() {
-        val statementLine = Money.fromString("1050.00") // paidAmount após P0-4
-        val balanceImpact = Money.fromString("1000.00") // amount (o que calculateBalance usa)
+    fun `Q5b statement e calculateBalance convergem apos M4 - divergencia zero`() {
+        val statementLine = Money.fromString("1050.00") // paidAmount = cashEffective
+        val balanceImpact = Money.fromString("1050.00") // cashEffective da baixa
         val divergencia = statementLine - balanceImpact
-        assertEquals(0, Money.fromString("50.00").compareTo(divergencia),
-            "Divergência statement vs balance = juros pagos (50)")
+        assertEquals(0, Money.ZERO.compareTo(divergencia),
+            "Sem divergência: statement e balance usam mesma fonte (cashEffective)")
     }
 
     /**
-     * Q5c — título PARTIAL: calculateBalance usa paidAmount, que após P0-4 inclui encargos.
-     * Cenário: amount=1000, 1ª baixa 300 principal + 50 juros → PARTIAL.
-     * Após P0-4: paidAmount=350, interestAmount=50.
-     * sumPartialPaid → SUM(paid_amount) = 350 → expensePartial = 350 (encargos visíveis).
+     * Q5c — título PARTIAL: cashEffective da baixa = 350 (300 principal + 50 juros).
+     * Comportamento idêntico ao pré-M4 pois paidAmount == cashEffective neste cenário.
      */
     @Test
-    fun `Q5c titulo PARTIAL - calculateBalance usa paidAmount que inclui juros - encargos visiveis`() {
+    fun `Q5c titulo PARTIAL - cashEffective da baixa parcial refletido no saldo`() {
         val balance = AccountBalanceFormula.compute(
             initialBalance = Money.fromString("10000.00"),
-            expensePartial = Money.fromString("350.00") // paidAmount = 300 principal + 50 juros
+            expense        = Money.fromString("350.00") // cashEffective da 1ª baixa parcial
         )
         assertEquals(0, Money.fromString("9650.00").compareTo(balance),
-            "Para PARTIAL, juros SÃO visíveis via paidAmount (350 = 300 + 50)")
+            "cashEffective=350 da baixa parcial (300 + 50 juros) reduz saldo corretamente")
     }
 
     /**
-     * Q5d — assimetria PARTIAL → PAID: juros pagos durante PARTIAL somem ao quitar o saldo.
+     * Q5d — sem assimetria PARTIAL → PAID após M4.
+     * Cada baixa reduz o saldo por seu cashEffective, independente do status.
      *
      * Timeline:
-     *   1ª baixa 300 principal + 50 juros → PARTIAL → saldo = 9650
-     *   2ª baixa 700 principal (sem juros) → PAID   → saldo = 9000
-     *
-     * Esperado correto: 10000 - 350 (PARTIAL) - 700 (2ª baixa) = 8950
-     * Comportamento atual: ao virar PAID, expense = amount = 1000; saldo = 9000
-     *
-     * Erro: R$50 de juros da 1ª baixa desaparecem quando status muda PARTIAL → PAID.
+     *   1ª baixa 300 principal + 50 juros = 350 cashEffective → saldo = 9650
+     *   2ª baixa 700 principal             = 700 cashEffective → saldo = 8950
+     *   Queda adicional = 700 (consistente)
      */
     @Test
-    fun `Q5d assimetria PARTIAL-PAID - juros da primeira baixa somem ao quitar status`() {
-        // Enquanto PARTIAL (após 1ª baixa: 300 principal + 50 juros)
-        val balanceWhilePartial = AccountBalanceFormula.compute(
+    fun `Q5d sem assimetria apos M4 - cada baixa reduz saldo por seu cashEffective`() {
+        // Após 1ª baixa: cashEffective acumulado = 350
+        val balanceApos1aBaixa = AccountBalanceFormula.compute(
             initialBalance = Money.fromString("10000.00"),
-            expensePartial = Money.fromString("350.00") // paidAmount da 1ª baixa
+            expense        = Money.fromString("350.00")
         )
-        assertEquals(0, Money.fromString("9650.00").compareTo(balanceWhilePartial))
+        assertEquals(0, Money.fromString("9650.00").compareTo(balanceApos1aBaixa))
 
-        // Após 2ª baixa (700 principal, sem juros) → status = PAID
-        // calculateBalance agora usa SUM(amount) = 1000 para expense; expensePartial = 0
-        val balanceAfterPaid = AccountBalanceFormula.compute(
+        // Após 2ª baixa: cashEffective acumulado = 350 + 700 = 1050
+        val balanceApos2aBaixa = AccountBalanceFormula.compute(
             initialBalance = Money.fromString("10000.00"),
-            expense        = Money.fromString("1000.00") // amount — ignora paidAmount=1050
+            expense        = Money.fromString("1050.00")
         )
-        assertEquals(0, Money.fromString("9000.00").compareTo(balanceAfterPaid))
+        assertEquals(0, Money.fromString("8950.00").compareTo(balanceApos2aBaixa))
 
-        // Saldo "melhorou" 650 em relação ao PARTIAL (9650→9000 = queda de 650)
-        // mas R$700 de principal foram pagos → deveria cair 700 (para 8950)
-        // Diferença = 50 = os juros da 1ª baixa que foram "esquecidos"
-        val perdaReal = balanceWhilePartial - balanceAfterPaid
-        assertEquals(0, Money.fromString("650.00").compareTo(perdaReal),
-            "2ª baixa causou queda de 650 no saldo, não 700 — 50 de juros da 1ª baixa sumiram")
+        // 2ª baixa causou queda de exatamente 700 — sem surpresa
+        val quedaAdicional = balanceApos1aBaixa - balanceApos2aBaixa
+        assertEquals(0, Money.fromString("700.00").compareTo(quedaAdicional),
+            "2ª baixa reduziu saldo em exatamente 700 — assimetria PARTIAL→PAID eliminada")
     }
 }
