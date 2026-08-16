@@ -77,7 +77,8 @@ class TransactionService(
             createdAt = LocalDateTime.now(),
             updatedAt = LocalDateTime.now(),
             paidAmount = null,
-            paymentDate = null
+            paymentDate = null,
+            origin = transaction.origin
         )
         if (prepared.status == TransactionStatus.DRAFT) {
             // mantém rascunho
@@ -290,7 +291,8 @@ class TransactionService(
             notes = notes,
             createdBy = userId,
             createdAt = now,
-            updatedAt = now
+            updatedAt = now,
+            origin = TransactionOrigin.TRANSFER
         )
         val destinationTemplate = source.copy(
             accountId = destinationAccountId,
@@ -350,7 +352,8 @@ class TransactionService(
             createdBy = userId,
             createdAt = now,
             updatedAt = now,
-            reversedType = original.type
+            reversedType = original.type,
+            origin = TransactionOrigin.REVERSAL
         )
         val reversalId = repository.insert(reversal)
 
@@ -466,7 +469,8 @@ class TransactionService(
             updatedAt = LocalDateTime.now(),
             isActive = true,
             parentTransactionId = source.id,
-            ledgerEntryId = null
+            ledgerEntryId = null,
+            origin = TransactionOrigin.DUPLICATE
         )
         val newId = create(copy)
         addTimeline(newId, TimelineEventType.DUPLICATED, "Duplicada a partir da transação #${source.id}", source.amount, null, TransactionStatus.PENDING)
@@ -495,7 +499,8 @@ class TransactionService(
                 paidAmount = null,
                 createdAt = LocalDateTime.now(),
                 updatedAt = LocalDateTime.now(),
-                ledgerEntryId = null
+                ledgerEntryId = null,
+                origin = TransactionOrigin.INSTALLMENT
             )
             val childId = repository.insert(child)
             addTimeline(childId, TimelineEventType.CREATED, "Parcela $i/$n criada automaticamente", childAmount, null, child.status)
@@ -515,7 +520,7 @@ class TransactionService(
     fun createFromOfx(tx: Transaction): Int {
         val userId = sessionManager.currentUser.value?.id ?: tx.createdBy
         val now    = LocalDateTime.now()
-        val prepared = tx.copy(id = 0, createdBy = userId, createdAt = now, updatedAt = now)
+        val prepared = tx.copy(id = 0, createdBy = userId, createdAt = now, updatedAt = now, origin = TransactionOrigin.OFX)
         validateAccount(prepared.accountId)
         val id = repository.insert(prepared)
         val amount = prepared.paidAmount ?: prepared.amount
@@ -533,7 +538,7 @@ class TransactionService(
     fun createFromPayrollImport(tx: Transaction): Int {
         val userId = sessionManager.currentUser.value?.id ?: tx.createdBy
         val now = LocalDateTime.now()
-        val prepared = tx.copy(id = 0, createdBy = userId, createdAt = now, updatedAt = now)
+        val prepared = tx.copy(id = 0, createdBy = userId, createdAt = now, updatedAt = now, origin = TransactionOrigin.PAYROLL_IMPORT)
         validateAccount(prepared.accountId)
         val id = repository.insert(prepared)
         addTimeline(id, TimelineEventType.PAYROLL_IMPORT,
@@ -577,7 +582,8 @@ class TransactionService(
             updatedAt = now,
             paymentDate  = null,
             paidAmount   = null,
-            ledgerEntryId = null
+            ledgerEntryId = null,
+            origin    = TransactionOrigin.RECURRENCE
         )
         validateAccount(prepared.accountId)
         val id = repository.insert(prepared)

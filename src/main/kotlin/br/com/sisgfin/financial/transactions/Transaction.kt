@@ -43,7 +43,8 @@ data class Transaction(
     val fineAmount: Money? = null,
     val projectId: Int? = null,
     /** Tipo do original quando `type == REVERSAL`; define a direção no saldo. */
-    val reversedType: TransactionType? = null
+    val reversedType: TransactionType? = null,
+    val origin: TransactionOrigin = TransactionOrigin.MANUAL
 ) : Identifiable, Activatable {
 
     /** Principal efetivamente amortizado — exclui juros e multa acumulados. */

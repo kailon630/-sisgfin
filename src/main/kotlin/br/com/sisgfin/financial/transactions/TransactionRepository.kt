@@ -232,6 +232,7 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             it[FinancialTransactionsTable.fineAmount]           = entity.fineAmount?.value
             it[FinancialTransactionsTable.projectId]            = entity.projectId
             it[FinancialTransactionsTable.reversedType]         = entity.reversedType?.name
+            it[FinancialTransactionsTable.origin]               = entity.origin.name
         } get FinancialTransactionsTable.id
     }
 
@@ -779,7 +780,8 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
         interestAmount        = row[FinancialTransactionsTable.interestAmount]?.toMoney(),
         fineAmount            = row[FinancialTransactionsTable.fineAmount]?.toMoney(),
         projectId             = row[FinancialTransactionsTable.projectId],
-        reversedType          = row[FinancialTransactionsTable.reversedType]?.let { TransactionType.valueOf(it) }
+        reversedType          = row[FinancialTransactionsTable.reversedType]?.let { TransactionType.valueOf(it) },
+        origin                = runCatching { TransactionOrigin.valueOf(row[FinancialTransactionsTable.origin]) }.getOrDefault(TransactionOrigin.MANUAL)
     )
 
     // Fase 7-B: soma paidAmount das transações PAID vinculadas ao contrato
@@ -823,7 +825,8 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             .map { rowToTransaction(it) }
     }
 
-    // Fase 8-C: retorna lançamentos canceláveis de um funcionário dentro do mês de referência e seguinte
+    // Fase 8-C: retorna lançamentos canceláveis de um funcionário dentro do mês de referência e seguinte.
+    // Filtra por origin=PAYROLL_ENGINE|PAYROLL_IMPORT para não cancelar lançamentos MANUAL com employeeId.
     fun findPendingPayrollForMonth(employeeId: Int, month: YearMonth): List<Transaction> = transaction {
         val from = month.atDay(1).atStartOfDay()
         val to = month.plusMonths(2).atDay(1).atStartOfDay()
@@ -832,13 +835,18 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             TransactionStatus.DRAFT.name,
             TransactionStatus.SCHEDULED.name
         )
+        val payrollOrigins = listOf(
+            TransactionOrigin.PAYROLL_ENGINE.name,
+            TransactionOrigin.PAYROLL_IMPORT.name
+        )
         FinancialTransactionsTable.selectAll()
             .where {
                 (FinancialTransactionsTable.employeeId eq employeeId) and
                 (FinancialTransactionsTable.status inList cancelable) and
                 (FinancialTransactionsTable.isActive eq true) and
                 (FinancialTransactionsTable.dueDate greaterEq from) and
-                (FinancialTransactionsTable.dueDate less to)
+                (FinancialTransactionsTable.dueDate less to) and
+                (FinancialTransactionsTable.origin inList payrollOrigins)
             }
             .map { rowToTransaction(it) }
     }

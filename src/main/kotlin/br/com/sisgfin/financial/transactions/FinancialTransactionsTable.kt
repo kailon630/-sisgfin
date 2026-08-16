@@ -37,6 +37,7 @@ object FinancialTransactionsTable : Table("financial_transactions") {
     val fineAmount           = decimal("fine_amount", 19, 2).nullable()
     val projectId            = integer("financial_project_id").nullable()
     val reversedType         = varchar("reversed_type", 20).nullable()
+    val origin               = varchar("origin", 20).default("MANUAL")
 
     override val primaryKey = PrimaryKey(id)
 }

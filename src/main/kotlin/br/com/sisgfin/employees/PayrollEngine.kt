@@ -3,6 +3,7 @@ package br.com.sisgfin.employees
 import br.com.sisgfin.EmployeeRepository
 import br.com.sisgfin.FinancialAccountRepository
 import br.com.sisgfin.financial.transactions.Transaction
+import br.com.sisgfin.financial.transactions.TransactionOrigin
 import br.com.sisgfin.financial.transactions.TransactionRepository
 import br.com.sisgfin.financial.transactions.TransactionService
 import br.com.sisgfin.financial.transactions.TransactionStatus
@@ -55,7 +56,8 @@ class PayrollEngine(
                             issueDate   = LocalDateTime.now(),
                             dueDate     = dueDate.atStartOfDay(),
                             accountId   = defaultAccountId,
-                            employeeId  = employee.id
+                            employeeId  = employee.id,
+                            origin      = TransactionOrigin.PAYROLL_ENGINE
                         )
                     )
                     generated++
@@ -97,7 +99,8 @@ class PayrollEngine(
                         issueDate   = LocalDateTime.now(),
                         dueDate     = dueDate.atStartOfDay(),
                         accountId   = defaultAccountId,
-                        employeeId  = employee.id
+                        employeeId  = employee.id,
+                        origin      = TransactionOrigin.PAYROLL_ENGINE
                     )
                 )
                 generated++
