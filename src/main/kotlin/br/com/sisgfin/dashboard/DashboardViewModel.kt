@@ -7,6 +7,7 @@ import br.com.sisgfin.core.errors.AppLogger
 import br.com.sisgfin.core.errors.ErrorClassifier
 import br.com.sisgfin.core.result.Result
 import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.payments.TransactionPaymentRepository
 import br.com.sisgfin.financial.transactions.TransactionRepository
 import br.com.sisgfin.financial.transactions.TransactionStatus
 import br.com.sisgfin.financial.transactions.TransactionType
@@ -24,7 +25,8 @@ class DashboardViewModel(
     private val accountRepository: FinancialAccountRepository,
     private val accountService: FinancialAccountService,
     private val transactionRepository: TransactionRepository,
-    private val cashFlowService: CashFlowService
+    private val cashFlowService: CashFlowService,
+    private val paymentRepository: TransactionPaymentRepository
 ) : BaseViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState(isLoading = true))
@@ -49,14 +51,16 @@ class DashboardViewModel(
                     }
                     val consolidated = accountBalances.fold(Money.ZERO) { a, ab -> a + ab.balance }
 
-                    // Receita e despesa do mês corrente (PAID)
-                    val monthPaid = transactionRepository.findAllPaid(from = monthStart, to = today)
-                    val monthIncome = monthPaid
-                        .filter { it.type == TransactionType.INCOME || it.type == TransactionType.REVERSAL }
-                        .fold(Money.ZERO) { a, t -> a + (t.paidAmount ?: t.amount) }
-                    val monthExpense = monthPaid
-                        .filter { it.type == TransactionType.EXPENSE }
-                        .fold(Money.ZERO) { a, t -> a + (t.paidAmount ?: t.amount) }
+                    // Receita e despesa do mês corrente — cashEffective das baixas (M4)
+                    val nextDay = today.plusDays(1)
+                    val monthExpense = paymentRepository.sumCashEffectiveInPeriod(
+                        listOf(TransactionType.EXPENSE), monthStart, nextDay
+                    )
+                    val monthIncome = paymentRepository.sumCashEffectiveInPeriod(
+                        listOf(TransactionType.INCOME), monthStart, nextDay
+                    ) + paymentRepository.sumCashEffectiveForReversalOfInPeriod(
+                        listOf(TransactionType.EXPENSE), monthStart, nextDay
+                    )
 
                     // Vencidos (despesas)
                     val overdueAll = transactionRepository.filterOverdue()

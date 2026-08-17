@@ -235,6 +235,83 @@ class TransactionPaymentRepository {
     }
 
     /**
+     * M4 Bloco 4 — KPIs mensais: soma cashEffective de baixas por tipo e período.
+     * Filtra por p.payment_date in [from, to). Inclui PARTIAL e PAID.
+     */
+    fun sumCashEffectiveInPeriod(
+        types: List<TransactionType>,
+        from: LocalDate,
+        to: LocalDate
+    ): Money = transaction {
+        if (types.isEmpty()) return@transaction Money.ZERO
+        TransactionPaymentsTable
+            .join(FinancialTransactionsTable, JoinType.INNER,
+                onColumn = TransactionPaymentsTable.transactionId,
+                otherColumn = FinancialTransactionsTable.id)
+            .select(
+                TransactionPaymentsTable.principalAmount,
+                TransactionPaymentsTable.interestAmount,
+                TransactionPaymentsTable.fineAmount,
+                TransactionPaymentsTable.discountAmount
+            )
+            .where {
+                (FinancialTransactionsTable.type inList types.map { it.name }) and
+                (FinancialTransactionsTable.isActive eq true) and
+                TransactionPaymentsTable.reversedById.isNull() and
+                (TransactionPaymentsTable.paymentDate greaterEq from) and
+                (TransactionPaymentsTable.paymentDate less to)
+            }
+            .fold(BigDecimal.ZERO) { acc, row ->
+                acc +
+                row[TransactionPaymentsTable.principalAmount] +
+                row[TransactionPaymentsTable.interestAmount] +
+                row[TransactionPaymentsTable.fineAmount] -
+                row[TransactionPaymentsTable.discountAmount]
+            }
+            .toMoney()
+    }
+
+    /**
+     * M4 Bloco 4 — crédito de estorno no período: cashEffective das baixas do original.
+     * Filtra pela paymentDate do título estornado (reversal.paymentDate in [from, to)).
+     */
+    fun sumCashEffectiveForReversalOfInPeriod(
+        originalTypes: List<TransactionType>,
+        from: LocalDate,
+        to: LocalDate
+    ): Money = transaction {
+        if (originalTypes.isEmpty()) return@transaction Money.ZERO
+        TransactionPaymentsTable
+            .join(FinancialTransactionsTable, JoinType.INNER,
+                additionalConstraint = {
+                    TransactionPaymentsTable.transactionId eq FinancialTransactionsTable.parentTransactionId
+                })
+            .select(
+                TransactionPaymentsTable.principalAmount,
+                TransactionPaymentsTable.interestAmount,
+                TransactionPaymentsTable.fineAmount,
+                TransactionPaymentsTable.discountAmount
+            )
+            .where {
+                (FinancialTransactionsTable.type eq TransactionType.REVERSAL.name) and
+                (FinancialTransactionsTable.status eq TransactionStatus.PAID.name) and
+                (FinancialTransactionsTable.isActive eq true) and
+                (FinancialTransactionsTable.reversedType inList originalTypes.map { it.name }) and
+                (FinancialTransactionsTable.paymentDate greaterEq from.atStartOfDay()) and
+                (FinancialTransactionsTable.paymentDate less to.atStartOfDay()) and
+                TransactionPaymentsTable.reversedById.isNull()
+            }
+            .fold(BigDecimal.ZERO) { acc, row ->
+                acc +
+                row[TransactionPaymentsTable.principalAmount] +
+                row[TransactionPaymentsTable.interestAmount] +
+                row[TransactionPaymentsTable.fineAmount] -
+                row[TransactionPaymentsTable.discountAmount]
+            }
+            .toMoney()
+    }
+
+    /**
      * M3 — portão de reconciliação.
      * Retorna títulos onde Σ(baixas ativas) ≠ paid_amount.
      * Zero linhas = sistema pode avançar para M4.
