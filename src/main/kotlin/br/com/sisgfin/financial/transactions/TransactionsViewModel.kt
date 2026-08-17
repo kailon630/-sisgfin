@@ -297,9 +297,15 @@ class TransactionsViewModel(
         paymentDate: LocalDateTime,
         paidAmount: Money,
         interestAmount: Money? = null,
-        fineAmount: Money? = null
+        fineAmount: Money? = null,
+        discountAmount: Money? = null
     ) {
-        runOperation { service.recordPayment(id, paymentDate, paidAmount, interestAmount, fineAmount) }
+        runOperation {
+            service.recordPayment(
+                id, paymentDate, paidAmount, interestAmount, fineAmount,
+                discountAmount = discountAmount ?: Money.ZERO
+            )
+        }
     }
 
     fun markAsPaidFull(id: Int, paymentDate: LocalDateTime = LocalDateTime.now()) {

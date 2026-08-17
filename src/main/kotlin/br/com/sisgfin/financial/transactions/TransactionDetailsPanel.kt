@@ -511,8 +511,8 @@ fun TransactionDetailsPanel(
             totalAmount = item.amount,
             outstandingPrincipal = item.outstandingPrincipal,
             onDismiss = { showPaymentDialog = false },
-            onConfirm = { date, paid, interest, fine ->
-                viewModel.recordPayment(item.id, date, paid, interest, fine)
+            onConfirm = { date, paid, interest, fine, discount ->
+                viewModel.recordPayment(item.id, date, paid, interest, fine, discount)
                 showPaymentDialog = false
             }
         )
@@ -804,11 +804,12 @@ fun PaymentRecordDialog(
     totalAmount: Money,
     outstandingPrincipal: Money,
     onDismiss: () -> Unit,
-    onConfirm: (LocalDateTime, Money, Money?, Money?) -> Unit
+    onConfirm: (LocalDateTime, Money, Money?, Money?, Money?) -> Unit
 ) {
     var paidStr by remember { mutableStateOf(outstandingPrincipal.toCentsStr()) }
     var interestStr by remember { mutableStateOf("") }
     var fineStr by remember { mutableStateOf("") }
+    var discountStr by remember { mutableStateOf("") }
     var payDate by remember { mutableStateOf(LocalDate.now().format(dateFormatter)) }
 
     val parsedDate = parseDate(payDate)
@@ -817,6 +818,8 @@ fun PaymentRecordDialog(
     } else null
 
     val alreadyPaid = totalAmount - outstandingPrincipal
+    val discount = discountStr.takeIf { it.isNotEmpty() }?.centsToMoney() ?: Money.ZERO
+    val willQuit = paidStr.centsToMoney() + discount
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -846,6 +849,14 @@ fun PaymentRecordDialog(
                 WsMoneyField("VALOR PAGO (R$)", paidStr) { paidStr = it }
                 WsMoneyField("JUROS (R$) — opcional", interestStr) { interestStr = it }
                 WsMoneyField("MULTA (R$) — opcional", fineStr) { fineStr = it }
+                WsMoneyField("DESCONTO (R$) — opcional", discountStr) { discountStr = it }
+                if (!discount.isZero()) {
+                    Text(
+                        "Você quitará: ${MoneyFormatter.format(willQuit)} (pago + desconto)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = WsTextSecondary
+                    )
+                }
                 WsDateField("DATA DE PAGAMENTO", payDate) { payDate = it }
                 if (dateError != null) {
                     Text(
@@ -861,7 +872,8 @@ fun PaymentRecordDialog(
                 if (dateError == null) {
                     val interest = interestStr.takeIf { it.isNotEmpty() }?.centsToMoney()
                     val fine = fineStr.takeIf { it.isNotEmpty() }?.centsToMoney()
-                    onConfirm(parsedDate.atStartOfDay(), paidStr.centsToMoney(), interest, fine)
+                    val disc = discountStr.takeIf { it.isNotEmpty() }?.centsToMoney()
+                    onConfirm(parsedDate.atStartOfDay(), paidStr.centsToMoney(), interest, fine, disc)
                 }
             })
         },
