@@ -9,6 +9,7 @@ import br.com.sisgfin.CostCenterRepository
 import br.com.sisgfin.SessionManager
 import br.com.sisgfin.SupplierRepository
 import br.com.sisgfin.core.crud.CrudOperations
+import br.com.sisgfin.core.validation.TextSanitizer
 import br.com.sisgfin.financial.ledger.LedgerService
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.RoundingPolicy
@@ -62,6 +63,16 @@ class TransactionService(
     // F0: ponto de leitura unificado para telas que usam TransactionQuery
     fun listByQuery(query: TransactionQuery): List<Transaction> = repository.find(query)
 
+    // T-21: limpa campos de texto livre antes de persistir.
+    // description e campos de documento são linha única (clean).
+    // notes aceita \n interno intencional (cleanPreserveNewlines).
+    private fun sanitize(tx: Transaction): Transaction = tx.copy(
+        description    = TextSanitizer.clean(tx.description) ?: "",
+        notes          = TextSanitizer.cleanPreserveNewlines(tx.notes),
+        documentType   = TextSanitizer.clean(tx.documentType),
+        documentNumber = TextSanitizer.clean(tx.documentNumber),
+    )
+
     fun create(transaction: Transaction): Int {
         val n = transaction.installmentTotal ?: 1
         val totalAmount = transaction.amount
@@ -90,6 +101,7 @@ class TransactionService(
         } else if (prepared.status !in setOf(TransactionStatus.PENDING, TransactionStatus.SCHEDULED)) {
             prepared = prepared.copy(status = TransactionStatus.PENDING)
         }
+        prepared = sanitize(prepared)
         TransactionValidator.validateForSave(prepared, existing = null)
         validateAccount(prepared.accountId)
         validateSupplier(prepared.supplierId)
@@ -119,11 +131,11 @@ class TransactionService(
         }
 
         // T-14: supplierId e employeeId são mutuamente exclusivos
-        val resolved = when {
+        val resolved = sanitize(when {
             transaction.employeeId != null -> transaction.copy(supplierId = null)
             transaction.supplierId != null -> transaction.copy(employeeId = null)
             else -> transaction
-        }
+        })
 
         // C2: lançamento terminal não permite alteração de campos financeiros
         if (TransactionStateMachine.isTerminal(existing.status)) {
@@ -299,20 +311,22 @@ class TransactionService(
 
         val userId = sessionManager.currentUser.value?.id
         val now = LocalDateTime.now()
+        val cleanDescription = TextSanitizer.clean(description) ?: ""
+        val cleanNotes = TextSanitizer.cleanPreserveNewlines(notes)
 
         // D5: transferência é evento consumado — nasce PAID com baixas na mesma transação atômica
         val source = Transaction(
             type = TransactionType.TRANSFER,
             status = TransactionStatus.PAID,
             amount = amount,
-            description = description,
+            description = cleanDescription,
             issueDate = now,
             dueDate = date,
             paymentDate = date,
             accountId = sourceAccountId,
             costCenterId = costCenterId,
             categoryId = categoryId,
-            notes = notes,
+            notes = cleanNotes,
             createdBy = userId,
             createdAt = now,
             updatedAt = now,
@@ -359,7 +373,7 @@ class TransactionService(
         val userId = sessionManager.currentUser.value?.id
         val now = LocalDateTime.now()
 
-        val reversal = Transaction(
+        val reversal = sanitize(Transaction(
             id = 0,
             type = TransactionType.REVERSAL,
             status = TransactionStatus.PAID,
@@ -380,7 +394,7 @@ class TransactionService(
             updatedAt = now,
             reversedType = original.type,
             origin = TransactionOrigin.REVERSAL
-        )
+        ))
         val reversalId = repository.insert(reversal)
 
         addTimeline(reversalId, TimelineEventType.REVERSAL_OF,
@@ -608,7 +622,7 @@ class TransactionService(
     fun createFromOfx(tx: Transaction): Int {
         val userId = sessionManager.currentUser.value?.id ?: tx.createdBy
         val now    = LocalDateTime.now()
-        val prepared = tx.copy(id = 0, createdBy = userId, createdAt = now, updatedAt = now, origin = TransactionOrigin.OFX)
+        val prepared = sanitize(tx.copy(id = 0, createdBy = userId, createdAt = now, updatedAt = now, origin = TransactionOrigin.OFX))
         validateAccount(prepared.accountId)
         val id = repository.insert(prepared)
         val amount = prepared.paidAmount ?: prepared.amount
@@ -626,7 +640,7 @@ class TransactionService(
     fun createFromPayrollImport(tx: Transaction): Int {
         val userId = sessionManager.currentUser.value?.id ?: tx.createdBy
         val now = LocalDateTime.now()
-        val prepared = tx.copy(id = 0, createdBy = userId, createdAt = now, updatedAt = now, origin = TransactionOrigin.PAYROLL_IMPORT)
+        val prepared = sanitize(tx.copy(id = 0, createdBy = userId, createdAt = now, updatedAt = now, origin = TransactionOrigin.PAYROLL_IMPORT))
         validateAccount(prepared.accountId)
         val id = repository.insert(prepared)
         addTimeline(id, TimelineEventType.PAYROLL_IMPORT,
@@ -662,7 +676,7 @@ class TransactionService(
     fun createFromRecurrence(tx: Transaction): Int {
         val userId  = sessionManager.currentUser.value?.id ?: tx.createdBy
         val now     = LocalDateTime.now()
-        val prepared = tx.copy(
+        val prepared = sanitize(tx.copy(
             id        = 0,
             status    = TransactionStatus.PENDING,
             createdBy = userId,
@@ -672,7 +686,7 @@ class TransactionService(
             paidAmount   = null,
             ledgerEntryId = null,
             origin    = TransactionOrigin.RECURRENCE
-        )
+        ))
         validateAccount(prepared.accountId)
         val id = repository.insert(prepared)
         addTimeline(id, TimelineEventType.RECURRENCE_GENERATED,
