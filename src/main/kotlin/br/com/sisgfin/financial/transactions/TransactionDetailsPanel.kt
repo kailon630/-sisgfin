@@ -509,6 +509,7 @@ fun TransactionDetailsPanel(
         PaymentRecordDialog(
             issueDate = item.issueDate,
             totalAmount = item.amount,
+            outstandingPrincipal = item.outstandingPrincipal,
             onDismiss = { showPaymentDialog = false },
             onConfirm = { date, paid, interest, fine ->
                 viewModel.recordPayment(item.id, date, paid, interest, fine)
@@ -801,10 +802,11 @@ private fun BaixasSection(
 fun PaymentRecordDialog(
     issueDate: LocalDateTime,
     totalAmount: Money,
+    outstandingPrincipal: Money,
     onDismiss: () -> Unit,
     onConfirm: (LocalDateTime, Money, Money?, Money?) -> Unit
 ) {
-    var paidStr by remember { mutableStateOf(totalAmount.toCentsStr()) }
+    var paidStr by remember { mutableStateOf(outstandingPrincipal.toCentsStr()) }
     var interestStr by remember { mutableStateOf("") }
     var fineStr by remember { mutableStateOf("") }
     var payDate by remember { mutableStateOf(LocalDate.now().format(dateFormatter)) }
@@ -814,6 +816,8 @@ fun PaymentRecordDialog(
         "Data de pagamento não pode ser anterior à data de emissão"
     } else null
 
+    val alreadyPaid = totalAmount - outstandingPrincipal
+
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
@@ -821,7 +825,24 @@ fun PaymentRecordDialog(
         title = { Text("Registrar pagamento") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Valor original: ${MoneyFormatter.format(totalAmount)}", color = WsTextSecondary)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SummaryRow("Valor original", MoneyFormatter.format(totalAmount))
+                    if (!alreadyPaid.isZero()) {
+                        SummaryRow("Total já pago", MoneyFormatter.format(alreadyPaid))
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(
+                            "Saldo devedor",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                        )
+                        Text(
+                            MoneyFormatter.format(outstandingPrincipal),
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = WsDanger
+                        )
+                    }
+                    HorizontalDivider(color = WsBorder)
+                }
                 WsMoneyField("VALOR PAGO (R$)", paidStr) { paidStr = it }
                 WsMoneyField("JUROS (R$) — opcional", interestStr) { interestStr = it }
                 WsMoneyField("MULTA (R$) — opcional", fineStr) { fineStr = it }
