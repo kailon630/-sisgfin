@@ -469,7 +469,7 @@ _Mova os cards aqui quando começar._
 
 #### Suíte de testes
 
-- [x] Evolução: 131 → 187 → 191 → 200 → 208 → 213 → 231 → 248 → 291 → 294 → 321 → 344 → 351 → 367 → 382 → 386 → 398 → 410 → **436** testes — confirmado em `./gradlew test` (BUILD SUCCESSFUL)
+- [x] Evolução: 131 → 187 → 191 → 200 → 208 → 213 → 231 → 248 → 291 → 294 → 321 → 344 → 351 → 367 → 382 → 386 → 398 → 410 → 436 → **451** testes — confirmado em `./gradlew test` (BUILD SUCCESSFUL)
 
 ---
 
@@ -562,7 +562,7 @@ _Mova os cards aqui quando começar._
 - [x] **T-19** — sanitização de caracteres de controle em cadastros: `TextSanitizer.clean()` remove C0/C1/NBSP/zero-width de campos de texto livre; aplicado em `PayrollXlsxParser.safeString/parseFuncao`, `EmployeeService.save()` (name/role/email) e `SupplierService.save()` (name); V35 limpa registros já persistidos em `employees` e `suppliers`; 19 testes (SANIT-01 a SANIT-19); commits `577c3c4` + `428f599`; doc `T19_SANITIZACAO.md`
   - **Origem:** incidente produção V31 — `SQLState 23505` causado por `\r` em `employees.name` vindo de célula multi-linha do SCI/Excel; `trim()` existente cobre apenas extremidades, não `\r` embedded.
 - [ ] **T-20** — migração que cria constraint (UNIQUE, FK, CHECK) exige pré-checagem documentada antes do deploy. A V31 passou na base de desenvolvimento (6 registros) e falhou na do cliente (81) com `SQLState 23505` — CPF duplicado por recadastro de funcionário inativado. A verificação foi pedida no T-10 e respondida com "sem acesso ao banco de produção"; precisa virar passo do processo de deploy, não da implementação. Entregável: checklist de pré-deploy com a query de verificação de cada constraint nova.
-- [ ] **T-21** — sanitizar `financial_transactions.description` e `.notes`: `TransactionService.create/update` não aplica `TextSanitizer`; OFX `OfxParser` só faz `trim()` no MEMO. Usar `cleanPreserveNewlines()` para campos onde `\n` interno pode ser intencional. Requer decisão sobre V36 (migration de dados históricos) antes de implementar.
+- [x] **T-21** — sanitizar `financial_transactions.description` e `.notes`: `TextSanitizer.clean/cleanPreserveNewlines()` em 7 pontos de `TransactionService`; `OfxParser` sanitiza MEMO e FITID; V36 limpa registros históricos; 15 testes (TSAN-01…11 + OFX-SAN-01…04); commits `9b02d1c` + `929da8a` + `a427cec`; doc `T21_SANITIZACAO_TRANSACOES.md`; tag `t21-sanitizacao-transacoes`
 - [ ] **R7.5** — sem single-instance; API em 0.0.0.0 sem TLS
 - [ ] **R7.6** — retorno das engines descartado; sem log nem tela de geração
 - [ ] **R7.4** — inativar funcionário deixa PENDING futuros pagáveis (`EmployeeService.toggleActive` sem cascata)
