@@ -3,12 +3,14 @@ package br.com.sisgfin.budget
 import br.com.sisgfin.core.domain.MutableEntityRepository
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.toMoney
+import br.com.sisgfin.financial.payments.TransactionPaymentsTable
 import br.com.sisgfin.financial.transactions.FinancialTransactionsTable
 import br.com.sisgfin.financial.transactions.TransactionStatus
 import br.com.sisgfin.financial.transactions.TransactionType
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.javatime.year
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.math.BigDecimal
 import java.time.LocalDateTime
 
 class BudgetItemRepository : MutableEntityRepository<BudgetItem> {
@@ -104,62 +106,127 @@ class BudgetItemRepository : MutableEntityRepository<BudgetItem> {
     }
 
     // Balancete: realizado no mês específico (para filtro mensal).
-    // C-11: soma somente EXPENSE; subtrai REVERSAL cujo reversed_type=EXPENSE.
+    // M4 D3(b): cashEffective das baixas; desconto reduz realizado; filtra por p.payment_date.
+    // C-11: soma EXPENSE; subtrai estornos de EXPENSE via cashEffective do original.
     fun sumRealizedMonth(costCenterId: Int, categoryId: Int, year: Int, month: Int): Money = transaction {
-        val from    = java.time.LocalDate.of(year, month, 1).atStartOfDay()
-        val to      = java.time.LocalDate.of(year, month, 1).plusMonths(1).atStartOfDay()
-        val sumExpr = FinancialTransactionsTable.amount.sum()
-        val expenses = FinancialTransactionsTable.select(sumExpr)
+        val from = java.time.LocalDate.of(year, month, 1)
+        val to   = from.plusMonths(1)
+
+        val expenses = TransactionPaymentsTable
+            .join(FinancialTransactionsTable, JoinType.INNER,
+                onColumn = TransactionPaymentsTable.transactionId,
+                otherColumn = FinancialTransactionsTable.id)
+            .select(
+                TransactionPaymentsTable.principalAmount,
+                TransactionPaymentsTable.interestAmount,
+                TransactionPaymentsTable.fineAmount,
+                TransactionPaymentsTable.discountAmount
+            )
             .where {
                 (FinancialTransactionsTable.costCenterId eq costCenterId) and
-                (FinancialTransactionsTable.categoryId  eq categoryId) and
-                (FinancialTransactionsTable.status      eq TransactionStatus.PAID.name) and
-                (FinancialTransactionsTable.isActive    eq true) and
-                (FinancialTransactionsTable.paymentDate greaterEq from) and
-                (FinancialTransactionsTable.paymentDate less to) and
-                (FinancialTransactionsTable.type        eq TransactionType.EXPENSE.name)
+                (FinancialTransactionsTable.categoryId   eq categoryId) and
+                (FinancialTransactionsTable.isActive     eq true) and
+                (FinancialTransactionsTable.type         eq TransactionType.EXPENSE.name) and
+                TransactionPaymentsTable.reversedById.isNull() and
+                (TransactionPaymentsTable.paymentDate greaterEq from) and
+                (TransactionPaymentsTable.paymentDate less to)
             }
-            .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
-        val reversals = FinancialTransactionsTable.select(sumExpr)
+            .fold(BigDecimal.ZERO) { acc, row ->
+                acc + row[TransactionPaymentsTable.principalAmount] +
+                      row[TransactionPaymentsTable.interestAmount] +
+                      row[TransactionPaymentsTable.fineAmount] -
+                      row[TransactionPaymentsTable.discountAmount]
+            }.toMoney()
+
+        val reversals = TransactionPaymentsTable
+            .join(FinancialTransactionsTable, JoinType.INNER,
+                additionalConstraint = {
+                    TransactionPaymentsTable.transactionId eq FinancialTransactionsTable.parentTransactionId
+                })
+            .select(
+                TransactionPaymentsTable.principalAmount,
+                TransactionPaymentsTable.interestAmount,
+                TransactionPaymentsTable.fineAmount,
+                TransactionPaymentsTable.discountAmount
+            )
             .where {
                 (FinancialTransactionsTable.costCenterId eq costCenterId) and
-                (FinancialTransactionsTable.categoryId  eq categoryId) and
-                (FinancialTransactionsTable.status      eq TransactionStatus.PAID.name) and
-                (FinancialTransactionsTable.isActive    eq true) and
-                (FinancialTransactionsTable.paymentDate greaterEq from) and
-                (FinancialTransactionsTable.paymentDate less to) and
-                (FinancialTransactionsTable.type        eq TransactionType.REVERSAL.name) and
-                (FinancialTransactionsTable.reversedType eq TransactionType.EXPENSE.name)
+                (FinancialTransactionsTable.categoryId   eq categoryId) and
+                (FinancialTransactionsTable.isActive     eq true) and
+                (FinancialTransactionsTable.type         eq TransactionType.REVERSAL.name) and
+                (FinancialTransactionsTable.status       eq TransactionStatus.PAID.name) and
+                (FinancialTransactionsTable.reversedType eq TransactionType.EXPENSE.name) and
+                (FinancialTransactionsTable.paymentDate greaterEq from.atStartOfDay()) and
+                (FinancialTransactionsTable.paymentDate less to.atStartOfDay()) and
+                TransactionPaymentsTable.reversedById.isNull()
             }
-            .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
+            .fold(BigDecimal.ZERO) { acc, row ->
+                acc + row[TransactionPaymentsTable.principalAmount] +
+                      row[TransactionPaymentsTable.interestAmount] +
+                      row[TransactionPaymentsTable.fineAmount] -
+                      row[TransactionPaymentsTable.discountAmount]
+            }.toMoney()
+
         expenses - reversals
     }
 
-    // RN-24: soma dos lançamentos PAID vinculados ao CC × categoria no ano.
-    // C-11: soma somente EXPENSE; subtrai REVERSAL cujo reversed_type=EXPENSE.
+    // RN-24: realizado no ano por CC × categoria.
+    // M4 D3(b): cashEffective das baixas; desconto reduz realizado.
+    // C-11: soma EXPENSE; subtrai estornos de EXPENSE via cashEffective do original.
     fun sumRealized(costCenterId: Int, categoryId: Int, year: Int): Money = transaction {
-        val sumExpr = FinancialTransactionsTable.amount.sum()
-        val expenses = FinancialTransactionsTable.select(sumExpr)
+        val expenses = TransactionPaymentsTable
+            .join(FinancialTransactionsTable, JoinType.INNER,
+                onColumn = TransactionPaymentsTable.transactionId,
+                otherColumn = FinancialTransactionsTable.id)
+            .select(
+                TransactionPaymentsTable.principalAmount,
+                TransactionPaymentsTable.interestAmount,
+                TransactionPaymentsTable.fineAmount,
+                TransactionPaymentsTable.discountAmount
+            )
             .where {
                 (FinancialTransactionsTable.costCenterId eq costCenterId) and
-                (FinancialTransactionsTable.categoryId  eq categoryId) and
-                (FinancialTransactionsTable.status      eq TransactionStatus.PAID.name) and
-                (FinancialTransactionsTable.isActive    eq true) and
-                (FinancialTransactionsTable.paymentDate.year() eq year) and
-                (FinancialTransactionsTable.type        eq TransactionType.EXPENSE.name)
+                (FinancialTransactionsTable.categoryId   eq categoryId) and
+                (FinancialTransactionsTable.isActive     eq true) and
+                (FinancialTransactionsTable.type         eq TransactionType.EXPENSE.name) and
+                TransactionPaymentsTable.reversedById.isNull() and
+                (TransactionPaymentsTable.paymentDate.year() eq year)
             }
-            .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
-        val reversals = FinancialTransactionsTable.select(sumExpr)
+            .fold(BigDecimal.ZERO) { acc, row ->
+                acc + row[TransactionPaymentsTable.principalAmount] +
+                      row[TransactionPaymentsTable.interestAmount] +
+                      row[TransactionPaymentsTable.fineAmount] -
+                      row[TransactionPaymentsTable.discountAmount]
+            }.toMoney()
+
+        val reversals = TransactionPaymentsTable
+            .join(FinancialTransactionsTable, JoinType.INNER,
+                additionalConstraint = {
+                    TransactionPaymentsTable.transactionId eq FinancialTransactionsTable.parentTransactionId
+                })
+            .select(
+                TransactionPaymentsTable.principalAmount,
+                TransactionPaymentsTable.interestAmount,
+                TransactionPaymentsTable.fineAmount,
+                TransactionPaymentsTable.discountAmount
+            )
             .where {
                 (FinancialTransactionsTable.costCenterId eq costCenterId) and
-                (FinancialTransactionsTable.categoryId  eq categoryId) and
-                (FinancialTransactionsTable.status      eq TransactionStatus.PAID.name) and
-                (FinancialTransactionsTable.isActive    eq true) and
+                (FinancialTransactionsTable.categoryId   eq categoryId) and
+                (FinancialTransactionsTable.isActive     eq true) and
+                (FinancialTransactionsTable.type         eq TransactionType.REVERSAL.name) and
+                (FinancialTransactionsTable.status       eq TransactionStatus.PAID.name) and
+                (FinancialTransactionsTable.reversedType eq TransactionType.EXPENSE.name) and
                 (FinancialTransactionsTable.paymentDate.year() eq year) and
-                (FinancialTransactionsTable.type        eq TransactionType.REVERSAL.name) and
-                (FinancialTransactionsTable.reversedType eq TransactionType.EXPENSE.name)
+                TransactionPaymentsTable.reversedById.isNull()
             }
-            .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
+            .fold(BigDecimal.ZERO) { acc, row ->
+                acc + row[TransactionPaymentsTable.principalAmount] +
+                      row[TransactionPaymentsTable.interestAmount] +
+                      row[TransactionPaymentsTable.fineAmount] -
+                      row[TransactionPaymentsTable.discountAmount]
+            }.toMoney()
+
         expenses - reversals
     }
 
