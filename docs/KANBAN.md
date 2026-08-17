@@ -469,7 +469,7 @@ _Mova os cards aqui quando começar._
 
 #### Suíte de testes
 
-- [x] Evolução: 131 → 187 → 191 → 200 → 208 → 213 → 231 → 248 → 291 → 294 → 321 → 344 → 351 → 367 → 382 → **386** testes — confirmado em `./gradlew test` (BUILD SUCCESSFUL)
+- [x] Evolução: 131 → 187 → 191 → 200 → 208 → 213 → 231 → 248 → 291 → 294 → 321 → 344 → 351 → 367 → 382 → 386 → **398** testes — confirmado em `./gradlew test` (BUILD SUCCESSFUL)
 
 ---
 
@@ -517,10 +517,21 @@ _Mova os cards aqui quando começar._
 
 #### Conformidade TCESP restante
 
-- [ ] **T-03** — `CF [DOC]` ausente em todos os lançamentos de folha — `PayrollEngine.kt:49-59` e `PayrollImportService.kt:94-127` não preenchem `documentType`/`documentNumber`; origem R8.2
+- [x] **T-03** — referência documental nos lançamentos de folha (RN-29) — `documentType = "FOLHA"`, `documentNumber = "MM/AAAA"` em `PayrollEngine` e `PayrollImportService`; adiantamento recebe sufixo `-ADT`; testes PE-01..03 + PI-01..03; commits `debda4e` (Bloco 1 — PayrollEngine) + `f28fd64` (Bloco 2 — PayrollImportService); tag `t03-doc-folha`
+
+  **Livro Diário — linha de folha (`buildTcespDesc`):**
+  | Condição | Histórico gerado |
+  |---|---|
+  | Antes (pré-T-03) | `PAGO A, ANA SILVA CF ` ← documentType/documentNumber NULL |
+  | PayrollEngine | `PAGO A, ANA SILVA CF FOLHA 08/2026` |
+  | PayrollImport — salário | `PAGO A, JOÃO SOUZA CF FOLHA 08/2026` |
+  | PayrollImport — adiantamento | `PAGO A, JOÃO SOUZA CF FOLHA 08/2026-ADT` |
+
+  **Dados existentes (base dev, 2026-08-17):** `SELECT COUNT(*) FROM financial_transactions WHERE is_active = true AND origin IN ('PAYROLL_ENGINE','PAYROLL_IMPORT') AND (document_type IS NULL OR document_number IS NULL)` → **7 lançamentos** sem documentação (pré-T-03). Ver **T-18**.
 - [x] **T-05** — extrato Excel com coluna FORNECEDOR — commit `0f2d830` (tag `t-conformidade-residual`)
 - [x] **T-11** — `CounterpartyResolver.resolve()` otimizado — commit `0f2d830` (tag `t-conformidade-residual`)
 - [ ] **T-12** — saneamento de dados: lançamentos PAID sem fornecedor nem funcionário agora exibem "CREDOR NÃO IDENTIFICADO" no Livro Diário — contar e tratar antes da próxima prestação de contas
+- [ ] **T-18** — saneamento de 7 lançamentos de folha pré-T-03 sem `document_type`/`document_number`: `UPDATE financial_transactions SET document_type = 'FOLHA', document_number = to_char(due_date, 'MM/YYYY') WHERE is_active = true AND origin IN ('PAYROLL_ENGINE','PAYROLL_IMPORT') AND (document_type IS NULL OR document_number IS NULL)`. Verificar antes se o `due_date` é a competência correta ou se exige ajuste manual caso a caso.
 - [ ] **T-17** — `expense_categories` não tem as colunas de classificação TCESP nem os dois níveis do AUDESP Fase V (grupo e categoria de despesa). O mapeamento não é derivável do código da rubrica: `3.1 Auxílio Alimentação` e `3.3 Vale-Transporte` são "Outros serviços de terceiros" no TCESP mas "RECURSOS HUMANOS" no AUDESP; rubricas de grupos diferentes convergem para o mesmo grupo AUDESP. Sem essas colunas o sistema não emite o arquivo do AUDESP Fase V. Exige migração + re-seed das 90 rubricas a partir da aba "Classificação Despesas" da planilha do cliente. Considerar também coluna de observação normativa (classificação suspensa/corrigida — ex: `1.2 Férias` está suspensa). **Status: pendente por decisão — cliente ainda não definiu se emitirá AUDESP pelo sistema.**
 - [ ] **R6.1 / R7.3** — folha gerada pelo `PayrollEngine` sem centro de custo nem categoria (0% de classificação na base); origem `R6_CLASSIFICACAO.md`
 - [ ] **R2.2** — não existe caminho de remessa bancária para fornecedor; `PayrollBankExporter` lê exclusivamente `employees` (V25); origem `R2_DADOS_BANCARIOS.md`
