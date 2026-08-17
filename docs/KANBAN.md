@@ -521,9 +521,13 @@ _Mova os cards aqui quando começar._
 - [x] **T-05** — extrato Excel com coluna FORNECEDOR — commit `0f2d830` (tag `t-conformidade-residual`)
 - [x] **T-11** — `CounterpartyResolver.resolve()` otimizado — commit `0f2d830` (tag `t-conformidade-residual`)
 - [ ] **T-12** — saneamento de dados: lançamentos PAID sem fornecedor nem funcionário agora exibem "CREDOR NÃO IDENTIFICADO" no Livro Diário — contar e tratar antes da próxima prestação de contas
+- [ ] **T-17** — `expense_categories` não tem as colunas de classificação TCESP nem os dois níveis do AUDESP Fase V (grupo e categoria de despesa). O mapeamento não é derivável do código da rubrica: `3.1 Auxílio Alimentação` e `3.3 Vale-Transporte` são "Outros serviços de terceiros" no TCESP mas "RECURSOS HUMANOS" no AUDESP; rubricas de grupos diferentes convergem para o mesmo grupo AUDESP. Sem essas colunas o sistema não emite o arquivo do AUDESP Fase V. Exige migração + re-seed das 90 rubricas a partir da aba "Classificação Despesas" da planilha do cliente. Considerar também coluna de observação normativa (classificação suspensa/corrigida — ex: `1.2 Férias` está suspensa). **Status: pendente por decisão — cliente ainda não definiu se emitirá AUDESP pelo sistema.**
 - [ ] **R6.1 / R7.3** — folha gerada pelo `PayrollEngine` sem centro de custo nem categoria (0% de classificação na base); origem `R6_CLASSIFICACAO.md`
 - [ ] **R2.2** — não existe caminho de remessa bancária para fornecedor; `PayrollBankExporter` lê exclusivamente `employees` (V25); origem `R2_DADOS_BANCARIOS.md`
 - [ ] **R2.3** — funcionário sem dados bancários é omitido silenciosamente da remessa; origem `R2_DADOS_BANCARIOS.md`
+- [ ] **R8.4** — Livro Diário não exibe centro de custo no histórico. `buildTcespDesc` monta `"PAGO A, [CREDOR] CF [DOC]"`. Lançamentos de mesma rubrica e mesmo fornecedor em unidades diferentes (energia do Cultivo vs. do Laboratório) ficam indistinguíveis na leitura. Avaliar acrescentar o centro de custo ao histórico quando houver. **Decisão pendente:** verificar se o formato do TCESP admite o acréscimo antes de implementar.
+
+> **Decisão (2026-08-17):** a "Identificação do processo" da planilha do cliente (ex: `ENERGIA ELÉTRICA - CULTIVO`, `FÉRIAS - HELVIA`) NÃO vira campo no SisgFin. É concatenação de dimensões que a planilha não tem separadas: centro de custo (unidade física), número do documento, funcionário e competência. O sistema já modela as quatro separadamente. Replicar o campo importaria a limitação junto com o dado. A orientação ao cliente é cadastrar as unidades físicas (Cultivo, Laboratório, Sede, Área de Lazer, Brasília) como **centros de custo** — o que ainda dá, de brinde, o consumo por unidade no Balancete.
 
 #### Transferência entre contas — confirmado pelo C-01
 
