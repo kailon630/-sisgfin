@@ -62,7 +62,10 @@ jobs:
 
       - name: Publish Release with GitHub CLI
         if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create ${{ github.ref_name }} build/compose/binaries/main/msi/*.msi --title "SisgFin ${{ github.ref_name }}" --notes "Instalador MSI gerado automaticamente para Windows." --clobber
+          $msiFile = Get-Item build/compose/binaries/main/msi/*.msi | Select-Object -ExpandProperty FullName
+          Write-Host "Arquivo encontrado: $msiFile"
+          gh release create ${{ github.ref_name }} "$msiFile" --title "SisgFin ${{ github.ref_name }}" --notes "Instalador MSI gerado automaticamente para Windows."
