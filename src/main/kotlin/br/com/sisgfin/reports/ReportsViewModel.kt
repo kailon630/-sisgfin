@@ -57,20 +57,22 @@ class ReportsViewModel(
             runCatching {
                 withContext(Dispatchers.IO) {
                     val accountMap  = accountRepository.findAll().associateBy { it.id }
-                    val txs = transactionRepository.findAllPaid(
+                    val entries = transactionRepository.findPaymentEntries(
                         from      = filter.from,
                         to        = filter.to,
                         accountId = filter.accountId
                     )
+                    val txs = entries.map { it.transaction }
                     val counterpartyMap = counterpartyResolver.resolve(txs)
-                    txs.map { tx ->
-                        val creditorName = counterpartyMap.nameFor(tx)
-                        val accountName  = accountMap[tx.accountId]?.name ?: "#${tx.accountId}"
+                    entries.map { pe ->
+                        val creditorName = counterpartyMap.nameFor(pe.transaction)
+                        val accountName  = accountMap[pe.payment.accountId]?.name ?: "#${pe.payment.accountId}"
                         LivroDiarioEntry(
-                            transaction  = tx,
-                            creditorName = creditorName,
-                            accountName  = accountName,
-                            tcespDesc    = buildTcespDesc(tx, creditorName)
+                            transaction    = pe.transaction,
+                            payment        = pe.payment,
+                            creditorName   = creditorName,
+                            accountName    = accountName,
+                            tcespDesc      = buildTcespDesc(pe.transaction, creditorName, pe.paymentOrdinal, pe.totalPayments)
                         )
                     }
                 }

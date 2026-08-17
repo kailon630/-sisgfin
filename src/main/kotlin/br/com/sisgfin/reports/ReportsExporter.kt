@@ -69,13 +69,12 @@ object ReportsExporter {
 
         var total = Money.ZERO
         entries.forEachIndexed { idx, entry ->
-            val tx  = entry.transaction
-            val row = sheet.createRow(rowIdx++)
-            val payDate = tx.paymentDate ?: tx.dueDate
-            val value = tx.paidAmount ?: tx.amount
+            val tx    = entry.transaction
+            val row   = sheet.createRow(rowIdx++)
+            val value = entry.cashEffective
 
             row.createCell(0).setCellValue((idx + 1).toDouble())
-            row.createCell(1).also { it.setCellValue(payDate.format(dateFmt)); it.cellStyle = dateCellFmt }
+            row.createCell(1).also { it.setCellValue(entry.paymentDate.format(dateFmt)); it.cellStyle = dateCellFmt }
             row.createCell(2).setCellValue(entry.tcespDesc)
             row.createCell(3).setCellValue(tx.type.displayName)
             row.createCell(4).setCellValue(entry.accountName)
@@ -162,8 +161,8 @@ object ReportsExporter {
                 cs.close(); cs = addPage(); y = pageH - margin; y = printHeader(cs, y)
             }
             val tx      = entry.transaction
-            val payDate = (tx.paymentDate ?: tx.dueDate).format(dateFmt)
-            val value   = tx.paidAmount ?: tx.amount
+            val payDate = entry.paymentDate.format(dateFmt)
+            val value   = entry.cashEffective
             val desc    = entry.tcespDesc.take(55)
 
             textAt(cs, "${idx+1}", cols[0], y, fontReg, 7.5f)

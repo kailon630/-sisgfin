@@ -2,6 +2,7 @@ package br.com.sisgfin.reports
 
 import br.com.sisgfin.FinancialAccount
 import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.payments.TransactionPayment
 import br.com.sisgfin.financial.projects.ProjectStatus
 import br.com.sisgfin.financial.transactions.Transaction
 import br.com.sisgfin.financial.transactions.TransactionType
@@ -17,10 +18,14 @@ data class LivroDiarioFilter(
 
 data class LivroDiarioEntry(
     val transaction: Transaction,
+    val payment: TransactionPayment,
     val creditorName: String?,
     val accountName: String,
     val tcespDesc: String
-)
+) {
+    val cashEffective: Money get() = payment.cashEffective
+    val paymentDate: LocalDate get() = payment.paymentDate
+}
 
 data class BalanceteFilter(
     val year: Int = LocalDate.now().year,
@@ -58,7 +63,12 @@ data class ReportsUiState(
     val errorMessage: String? = null
 )
 
-fun buildTcespDesc(tx: Transaction, creditorName: String?): String {
+fun buildTcespDesc(
+    tx: Transaction,
+    creditorName: String?,
+    paymentOrdinal: Int = 1,
+    totalPayments: Int? = null
+): String {
     val prefix = when (tx.type) {
         TransactionType.INCOME, TransactionType.REVERSAL -> "RECEBIDO DE,"
         else -> "PAGO A,"
@@ -71,7 +81,14 @@ fun buildTcespDesc(tx: Transaction, creditorName: String?): String {
         tx.documentNumber != null -> " CF DOC ${tx.documentNumber}"
         else -> ""
     }
-    return "$prefix $creditor$docPart"
+    // Sem sufixo quando há apenas uma baixa ativa; denominador omitido se título ainda PARTIAL.
+    val multiplePayments = (totalPayments ?: paymentOrdinal) > 1
+    val ordinalPart = when {
+        !multiplePayments -> ""
+        totalPayments != null -> " (PAGTO $paymentOrdinal/$totalPayments)"
+        else -> " (PAGTO $paymentOrdinal)"
+    }
+    return "$prefix $creditor$docPart$ordinalPart"
 }
 
 // ── Demonstrativo Financeiro ─────────────────────────────────────────────────
