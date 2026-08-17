@@ -556,7 +556,8 @@ _Mova os cards aqui quando começar._
 
 - [ ] **R4.1** — engines sem UNIQUE de idempotência no banco
 - [ ] **R4.2** — falhas de Payroll/Recurrence no boot engolidas sem log (`Main.kt:169-187`)
-- [ ] **R4.5** — sem lock otimista / `FOR UPDATE` em escritas financeiras; vetor real: desktop multi-instância + API 8080 + engines no boot
+- [x] **R4.5** — lock otimista em `financial_transactions`: coluna `version INTEGER NOT NULL DEFAULT 0` (V34); `update()` e `updateWithPayment()` verificam version na WHERE e incrementam no SET; zero linhas = `ConcurrentModificationException`; UI recarrega lista e exibe snackbar; API responde 409 Conflict; commits `4bf3383` + `c18a88d` + `a8c164b`; doc `R45_LOCK_OTIMISTA.md`; tag `r45-lock-otimista`
+  - **Premissa `transaction_payments` imutável:** parcialmente verdadeira — `reversed_by_id` é escrito no original como parte do par de estorno (atômico em `reversePaymentAndUpdateTitle()`), mas nenhum campo financeiro (valor, data, conta) sofre UPDATE. Lock na tabela de baixas desnecessário.
 - [ ] **R7.5** — sem single-instance; API em 0.0.0.0 sem TLS
 - [ ] **R7.6** — retorno das engines descartado; sem log nem tela de geração
 - [ ] **R7.4** — inativar funcionário deixa PENDING futuros pagáveis (`EmployeeService.toggleActive` sem cascata)
