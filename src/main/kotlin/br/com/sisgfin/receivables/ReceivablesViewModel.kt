@@ -1,10 +1,10 @@
 package br.com.sisgfin.receivables
 
-import br.com.sisgfin.SupplierRepository
 import br.com.sisgfin.core.errors.AppLogger
 import br.com.sisgfin.core.errors.ErrorClassifier
 import br.com.sisgfin.core.result.Result
 import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.transactions.CounterpartyResolver
 import br.com.sisgfin.financial.transactions.Transaction
 import br.com.sisgfin.financial.transactions.TransactionRepository
 import br.com.sisgfin.financial.transactions.TransactionService
@@ -41,7 +41,7 @@ data class ReceivablesUiState(
 
 class ReceivablesViewModel(
     private val transactionRepository: TransactionRepository,
-    private val supplierRepository: SupplierRepository,
+    private val counterpartyResolver: CounterpartyResolver,
     private val transactionService: TransactionService
 ) : BaseViewModel() {
 
@@ -58,13 +58,13 @@ class ReceivablesViewModel(
                     transactionService.syncOverdueStatuses()
                     val today = LocalDate.now()
                     val all = transactionRepository.findReceivables()
-                    val supplierNames = supplierRepository.findAll().associate { it.id to it.name }
+                    val counterparties = counterpartyResolver.resolve(all)
 
                     val groups = all
-                        .groupBy { it.supplierId }
-                        .map { (suppId, txs) ->
+                        .groupBy { counterparties.nameFor(it) ?: "Sem cliente" }
+                        .map { (clientName, txs) ->
                             ReceivablesGroup(
-                                clientName = suppId?.let { supplierNames[it] } ?: "Sem cliente",
+                                clientName = clientName,
                                 items = txs.sortedBy { it.dueDate }
                             )
                         }
