@@ -60,10 +60,9 @@ jobs:
           path: build/compose/binaries/main/msi/*.msi
           retention-days: 60
 
-      - name: Criar Release no GitHub (somente em tags v*)
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: build/compose/binaries/main/msi/*.msi
-          generate_release_notes: true
-          name: SisgFin ${{ github.ref_name }}
+      - name: Publish Release with GitHub CLI
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ github.ref_name }} build/compose/binaries/main/msi/*.msi --title "SisgFin ${{ github.ref_name }}" --notes "Instalador MSI gerado automaticamente para Windows." --clobber
