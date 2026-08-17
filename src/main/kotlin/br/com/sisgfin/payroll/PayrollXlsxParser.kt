@@ -1,5 +1,6 @@
 package br.com.sisgfin.payroll
 
+import br.com.sisgfin.core.validation.TextSanitizer
 import br.com.sisgfin.financial.money.Money
 import org.apache.poi.ss.usermodel.Cell
 import org.apache.poi.ss.usermodel.CellType
@@ -204,13 +205,13 @@ class PayrollXlsxParser {
     // "... Função: AUXILIAR ADMINISTRATIVO"
     private fun parseFuncao(text: String): String {
         val m = Regex("""Função:\s*(.+)""").find(text) ?: return ""
-        return m.groupValues[1].trim()
+        return TextSanitizer.clean(m.groupValues[1]) ?: ""
     }
 
     private fun Cell?.safeString(): String {
         this ?: return ""
         return when (cellType) {
-            CellType.STRING -> stringCellValue.trim()
+            CellType.STRING -> TextSanitizer.clean(stringCellValue) ?: ""
             CellType.NUMERIC -> {
                 val d = numericCellValue
                 if (d == kotlin.math.floor(d) && !java.lang.Double.isInfinite(d))
@@ -219,7 +220,7 @@ class PayrollXlsxParser {
             }
             CellType.FORMULA -> try {
                 when (cachedFormulaResultType) {
-                    CellType.STRING -> stringCellValue.trim()
+                    CellType.STRING -> TextSanitizer.clean(stringCellValue) ?: ""
                     CellType.NUMERIC -> numericCellValue.let { d ->
                         if (d == kotlin.math.floor(d)) d.toLong().toString() else d.toString()
                     }

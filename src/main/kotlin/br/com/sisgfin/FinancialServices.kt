@@ -3,6 +3,7 @@ package br.com.sisgfin
 import br.com.sisgfin.core.domain.AuditedCrudService
 import br.com.sisgfin.core.domain.MutableEntityRepository
 import br.com.sisgfin.core.validation.DocumentValidator
+import br.com.sisgfin.core.validation.TextSanitizer
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.MoneyFormatter
 import br.com.sisgfin.financial.payments.TransactionPaymentRepository
@@ -25,7 +26,10 @@ class SupplierService(
 ) {
     // RN-03 + RN-01
     override fun save(item: Supplier) {
-        val normalized = item.copy(document = DocumentValidator.normalize(item.document))
+        val normalized = item.copy(
+            document = DocumentValidator.normalize(item.document),
+            name     = TextSanitizer.clean(item.name) ?: "",
+        )
 
         DocumentValidator.validate(normalized.document)
 

@@ -2,6 +2,7 @@ package br.com.sisgfin
 
 import br.com.sisgfin.core.crud.CrudOperations
 import br.com.sisgfin.core.validation.DocumentValidator
+import br.com.sisgfin.core.validation.TextSanitizer
 import br.com.sisgfin.employees.PayrollEngine
 import br.com.sisgfin.employees.PayrollGenerationResult
 
@@ -16,7 +17,12 @@ class EmployeeService(
     override fun listAll(): List<Employee> = repository.getAll()
 
     override fun save(employee: Employee) {
-        val emp = employee.copy(document = DocumentValidator.normalize(employee.document))
+        val emp = employee.copy(
+            document = DocumentValidator.normalize(employee.document),
+            name     = TextSanitizer.clean(employee.name) ?: "",
+            role     = TextSanitizer.clean(employee.role) ?: "",
+            email    = TextSanitizer.clean(employee.email) ?: "",
+        )
         if (emp.id == 0) {
             val newId = repository.insert(emp)
             lastPayrollResult = if (emp.effectivePaymentDays().isNotEmpty())
