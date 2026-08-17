@@ -122,7 +122,7 @@ fun TransactionDetailsPanel(
         .map { it.id to it.name }
     val costCenterOptions = costCenters.map { it.id to it.name }
     val projectOptions = projects.map { it.id to it.name }
-    val categoryOptions = categories.map { it.id to it.name }
+    val categoryOptions = filterCategoriesForType(categories, type, categoryId)
 
     BaseCrudPanel(
         title = if (item.id == 0) "Nova Transação" else item.description,
@@ -276,6 +276,7 @@ fun TransactionDetailsPanel(
                         if (type != t) {
                             type = t
                             supplierId = null
+                            categoryId = null
                         }
                     }
                 )
@@ -943,6 +944,22 @@ fun ReversalDialog(
         dismissButton = { WsButton("Cancelar", variant = WsButtonVariant.TERTIARY, onClick = onDismiss) }
     )
 }
+
+internal fun filterCategoriesForType(
+    categories: List<br.com.sisgfin.financial.categories.ExpenseCategory>,
+    type: TransactionType,
+    currentCategoryId: Int?
+): List<Pair<Int, String>> = categories
+    .filter { cat ->
+        val matchesType = when (type) {
+            TransactionType.INCOME   -> cat.isIncome
+            TransactionType.EXPENSE  -> !cat.isIncome
+            else -> true  // TRANSFER, ADJUSTMENT, REVERSAL: todas as categorias
+        }
+        // Preserva seleção legada fora do tipo para não sumir silenciosamente
+        matchesType || cat.id == currentCategoryId
+    }
+    .map { it.id to it.name }
 
 private fun parseDate(value: String): LocalDate {
     val s = value.trim()
