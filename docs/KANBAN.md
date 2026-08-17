@@ -469,7 +469,7 @@ _Mova os cards aqui quando começar._
 
 #### Suíte de testes
 
-- [x] Evolução: 131 → 187 → 191 → 200 → 208 → 213 → 231 → 248 → 291 → 294 → 321 → 344 → 351 → 367 → 382 → 386 → 398 → **410** testes — confirmado em `./gradlew test` (BUILD SUCCESSFUL)
+- [x] Evolução: 131 → 187 → 191 → 200 → 208 → 213 → 231 → 248 → 291 → 294 → 321 → 344 → 351 → 367 → 382 → 386 → 398 → 410 → **436** testes — confirmado em `./gradlew test` (BUILD SUCCESSFUL)
 
 ---
 
@@ -497,6 +497,7 @@ _Mova os cards aqui quando começar._
 - [ ] **M5** — UI: diálogo grava baixa; painel lista as baixas
 - [ ] **M6** — `paidAmount`
 - [ ] **C-18** — sem teste de integração do JOIN `parentTransactionId` em `sumCashEffectiveForReversalOf`; os testes atuais são unitários sobre `AccountBalanceFormula`
+- [ ] **C-19** — `findReconciliationDivergences()` usa SQL raw com `HAVING` e `COALESCE` e não tem teste. `ReconciliationTest` cobre a data class `ReconciliationDivergence`, não a query. É o portão do M3 — se quebrar, falha em silêncio. Agora testável com H2 (adicionado no R4.5).
 
 ---
 
@@ -556,11 +557,12 @@ _Mova os cards aqui quando começar._
 
 - [ ] **R4.1** — engines sem UNIQUE de idempotência no banco
 - [ ] **R4.2** — falhas de Payroll/Recurrence no boot engolidas sem log (`Main.kt:169-187`)
-- [x] **R4.5** — lock otimista em `financial_transactions`: coluna `version INTEGER NOT NULL DEFAULT 0` (V34); `update()` e `updateWithPayment()` verificam version na WHERE e incrementam no SET; zero linhas = `ConcurrentModificationException`; UI recarrega lista e exibe snackbar; API responde 409 Conflict; commits `4bf3383` + `c18a88d` + `a8c164b`; doc `R45_LOCK_OTIMISTA.md`; tag `r45-lock-otimista`
+- [x] **R4.5** — lock otimista em `financial_transactions`: coluna `version INTEGER NOT NULL DEFAULT 0` (V34); `update()` e `updateWithPayment()` verificam version na WHERE e incrementam no SET; zero linhas = `ConcurrentModificationException`; UI recarrega lista e exibe snackbar; API responde 409 Conflict; commits `4bf3383` + `c18a88d` + `a8c164b` + `3091975`; doc `R45_LOCK_OTIMISTA.md`; tag `r45-lock-otimista`
   - **Premissa `transaction_payments` imutável:** parcialmente verdadeira — `reversed_by_id` é escrito no original como parte do par de estorno (atômico em `reversePaymentAndUpdateTitle()`), mas nenhum campo financeiro (valor, data, conta) sofre UPDATE. Lock na tabela de baixas desnecessário.
 - [x] **T-19** — sanitização de caracteres de controle em cadastros: `TextSanitizer.clean()` remove C0/C1/NBSP/zero-width de campos de texto livre; aplicado em `PayrollXlsxParser.safeString/parseFuncao`, `EmployeeService.save()` (name/role/email) e `SupplierService.save()` (name); V35 limpa registros já persistidos em `employees` e `suppliers`; 19 testes (SANIT-01 a SANIT-19); commits `577c3c4` + `428f599`; doc `T19_SANITIZACAO.md`
   - **Origem:** incidente produção V31 — `SQLState 23505` causado por `\r` em `employees.name` vindo de célula multi-linha do SCI/Excel; `trim()` existente cobre apenas extremidades, não `\r` embedded.
-- [ ] **T-20** — sanitizar `financial_transactions.description` e `.notes`: `TransactionService.create/update` não aplica `TextSanitizer`; OFX `OfxParser` só faz `trim()` no MEMO. Usar `cleanPreserveNewlines()` para campos onde `\n` interno pode ser intencional. Requer decisão sobre V36 (migration de dados históricos) antes de implementar.
+- [ ] **T-20** — migração que cria constraint (UNIQUE, FK, CHECK) exige pré-checagem documentada antes do deploy. A V31 passou na base de desenvolvimento (6 registros) e falhou na do cliente (81) com `SQLState 23505` — CPF duplicado por recadastro de funcionário inativado. A verificação foi pedida no T-10 e respondida com "sem acesso ao banco de produção"; precisa virar passo do processo de deploy, não da implementação. Entregável: checklist de pré-deploy com a query de verificação de cada constraint nova.
+- [ ] **T-21** — sanitizar `financial_transactions.description` e `.notes`: `TransactionService.create/update` não aplica `TextSanitizer`; OFX `OfxParser` só faz `trim()` no MEMO. Usar `cleanPreserveNewlines()` para campos onde `\n` interno pode ser intencional. Requer decisão sobre V36 (migration de dados históricos) antes de implementar.
 - [ ] **R7.5** — sem single-instance; API em 0.0.0.0 sem TLS
 - [ ] **R7.6** — retorno das engines descartado; sem log nem tela de geração
 - [ ] **R7.4** — inativar funcionário deixa PENDING futuros pagáveis (`EmployeeService.toggleActive` sem cascata)
