@@ -62,8 +62,8 @@ class FinancialAccountService(
         val income         = paymentRepository.sumCashEffectiveByAccountAndType(accountId, TransactionType.INCOME)
         val expense        = paymentRepository.sumCashEffectiveByAccountAndType(accountId, TransactionType.EXPENSE)
         val adjustment     = paymentRepository.sumCashEffectiveByAccountAndType(accountId, TransactionType.ADJUSTMENT)
-        val transferIn     = transactionRepository.sumPaidTransferIn(accountId)
-        val transferOut    = transactionRepository.sumPaidTransferOut(accountId)
+        val transferIn     = paymentRepository.sumCashEffectiveTransferIn(accountId)
+        val transferOut    = paymentRepository.sumCashEffectiveTransferOut(accountId)
         val reversalCredit = paymentRepository.sumCashEffectiveForReversalOf(
             accountId, listOf(TransactionType.EXPENSE)
         )

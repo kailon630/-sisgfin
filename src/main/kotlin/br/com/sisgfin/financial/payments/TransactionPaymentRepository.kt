@@ -312,6 +312,130 @@ class TransactionPaymentRepository {
     }
 
     /**
+     * M5-A: cashEffective de transferências que SAEM da conta (perna de origem,
+     * parentTransactionId IS NULL). Filtro por baixa.account_id, não por título.
+     */
+    fun sumCashEffectiveTransferOut(accountId: Int): Money = transaction {
+        TransactionPaymentsTable
+            .join(FinancialTransactionsTable, JoinType.INNER,
+                onColumn = TransactionPaymentsTable.transactionId,
+                otherColumn = FinancialTransactionsTable.id)
+            .select(
+                TransactionPaymentsTable.principalAmount,
+                TransactionPaymentsTable.interestAmount,
+                TransactionPaymentsTable.fineAmount,
+                TransactionPaymentsTable.discountAmount
+            )
+            .where {
+                (TransactionPaymentsTable.accountId eq accountId) and
+                (FinancialTransactionsTable.type eq TransactionType.TRANSFER.name) and
+                (FinancialTransactionsTable.isActive eq true) and
+                FinancialTransactionsTable.parentTransactionId.isNull() and
+                TransactionPaymentsTable.reversedById.isNull()
+            }
+            .fold(BigDecimal.ZERO) { acc, row ->
+                acc +
+                row[TransactionPaymentsTable.principalAmount] +
+                row[TransactionPaymentsTable.interestAmount] +
+                row[TransactionPaymentsTable.fineAmount] -
+                row[TransactionPaymentsTable.discountAmount]
+            }
+            .toMoney()
+    }
+
+    /**
+     * M5-A: cashEffective de transferências que ENTRAM na conta (perna de destino,
+     * parentTransactionId IS NOT NULL). Filtro por baixa.account_id.
+     */
+    fun sumCashEffectiveTransferIn(accountId: Int): Money = transaction {
+        TransactionPaymentsTable
+            .join(FinancialTransactionsTable, JoinType.INNER,
+                onColumn = TransactionPaymentsTable.transactionId,
+                otherColumn = FinancialTransactionsTable.id)
+            .select(
+                TransactionPaymentsTable.principalAmount,
+                TransactionPaymentsTable.interestAmount,
+                TransactionPaymentsTable.fineAmount,
+                TransactionPaymentsTable.discountAmount
+            )
+            .where {
+                (TransactionPaymentsTable.accountId eq accountId) and
+                (FinancialTransactionsTable.type eq TransactionType.TRANSFER.name) and
+                (FinancialTransactionsTable.isActive eq true) and
+                FinancialTransactionsTable.parentTransactionId.isNotNull() and
+                TransactionPaymentsTable.reversedById.isNull()
+            }
+            .fold(BigDecimal.ZERO) { acc, row ->
+                acc +
+                row[TransactionPaymentsTable.principalAmount] +
+                row[TransactionPaymentsTable.interestAmount] +
+                row[TransactionPaymentsTable.fineAmount] -
+                row[TransactionPaymentsTable.discountAmount]
+            }
+            .toMoney()
+    }
+
+    /** M5-A: variante Before para openingBalance. */
+    fun sumCashEffectiveTransferOutBefore(accountId: Int, before: LocalDate): Money = transaction {
+        TransactionPaymentsTable
+            .join(FinancialTransactionsTable, JoinType.INNER,
+                onColumn = TransactionPaymentsTable.transactionId,
+                otherColumn = FinancialTransactionsTable.id)
+            .select(
+                TransactionPaymentsTable.principalAmount,
+                TransactionPaymentsTable.interestAmount,
+                TransactionPaymentsTable.fineAmount,
+                TransactionPaymentsTable.discountAmount
+            )
+            .where {
+                (TransactionPaymentsTable.accountId eq accountId) and
+                (FinancialTransactionsTable.type eq TransactionType.TRANSFER.name) and
+                (FinancialTransactionsTable.isActive eq true) and
+                FinancialTransactionsTable.parentTransactionId.isNull() and
+                TransactionPaymentsTable.reversedById.isNull() and
+                (TransactionPaymentsTable.paymentDate less before)
+            }
+            .fold(BigDecimal.ZERO) { acc, row ->
+                acc +
+                row[TransactionPaymentsTable.principalAmount] +
+                row[TransactionPaymentsTable.interestAmount] +
+                row[TransactionPaymentsTable.fineAmount] -
+                row[TransactionPaymentsTable.discountAmount]
+            }
+            .toMoney()
+    }
+
+    /** M5-A: variante Before para openingBalance. */
+    fun sumCashEffectiveTransferInBefore(accountId: Int, before: LocalDate): Money = transaction {
+        TransactionPaymentsTable
+            .join(FinancialTransactionsTable, JoinType.INNER,
+                onColumn = TransactionPaymentsTable.transactionId,
+                otherColumn = FinancialTransactionsTable.id)
+            .select(
+                TransactionPaymentsTable.principalAmount,
+                TransactionPaymentsTable.interestAmount,
+                TransactionPaymentsTable.fineAmount,
+                TransactionPaymentsTable.discountAmount
+            )
+            .where {
+                (TransactionPaymentsTable.accountId eq accountId) and
+                (FinancialTransactionsTable.type eq TransactionType.TRANSFER.name) and
+                (FinancialTransactionsTable.isActive eq true) and
+                FinancialTransactionsTable.parentTransactionId.isNotNull() and
+                TransactionPaymentsTable.reversedById.isNull() and
+                (TransactionPaymentsTable.paymentDate less before)
+            }
+            .fold(BigDecimal.ZERO) { acc, row ->
+                acc +
+                row[TransactionPaymentsTable.principalAmount] +
+                row[TransactionPaymentsTable.interestAmount] +
+                row[TransactionPaymentsTable.fineAmount] -
+                row[TransactionPaymentsTable.discountAmount]
+            }
+            .toMoney()
+    }
+
+    /**
      * M3 — portão de reconciliação.
      * Retorna títulos onde Σ(baixas ativas) ≠ paid_amount.
      * Zero linhas = sistema pode avançar para M4.

@@ -648,36 +648,6 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
     }
 
-    // RN-04 (extensão): transferências que ENTRAM na conta (destino, tem parentId)
-    fun sumPaidTransferIn(accountId: Int): Money = transaction {
-        val sumExpr = FinancialTransactionsTable.amount.sum()
-        FinancialTransactionsTable
-            .select(sumExpr)
-            .where {
-                (FinancialTransactionsTable.accountId eq accountId) and
-                (FinancialTransactionsTable.type eq TransactionType.TRANSFER.name) and
-                (FinancialTransactionsTable.status eq TransactionStatus.PAID.name) and
-                (FinancialTransactionsTable.isActive eq true) and
-                (FinancialTransactionsTable.parentTransactionId.isNotNull())
-            }
-            .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
-    }
-
-    // RN-04 (extensão): transferências que SAEM da conta (origem, não tem parentId de transferência)
-    fun sumPaidTransferOut(accountId: Int): Money = transaction {
-        val sumExpr = FinancialTransactionsTable.amount.sum()
-        FinancialTransactionsTable
-            .select(sumExpr)
-            .where {
-                (FinancialTransactionsTable.accountId eq accountId) and
-                (FinancialTransactionsTable.type eq TransactionType.TRANSFER.name) and
-                (FinancialTransactionsTable.status eq TransactionStatus.PAID.name) and
-                (FinancialTransactionsTable.isActive eq true) and
-                (FinancialTransactionsTable.parentTransactionId.isNull())
-            }
-            .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
-    }
-
     // RN-19: filhos canceláveis (PENDING ou DRAFT) de um lançamento pai
     fun findActiveChildrenOf(parentId: Int): List<Transaction> = transaction {
         FinancialTransactionsTable
@@ -773,34 +743,6 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
     }
 
-    private fun sumPaidTransferInBefore(accountId: Int, before: LocalDate): Money = transaction {
-        val sumExpr = FinancialTransactionsTable.amount.sum()
-        FinancialTransactionsTable.select(sumExpr)
-            .where {
-                (FinancialTransactionsTable.accountId eq accountId) and
-                (FinancialTransactionsTable.type eq TransactionType.TRANSFER.name) and
-                (FinancialTransactionsTable.status eq TransactionStatus.PAID.name) and
-                (FinancialTransactionsTable.isActive eq true) and
-                (FinancialTransactionsTable.parentTransactionId.isNotNull()) and
-                (FinancialTransactionsTable.paymentDate less before.atStartOfDay())
-            }
-            .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
-    }
-
-    private fun sumPaidTransferOutBefore(accountId: Int, before: LocalDate): Money = transaction {
-        val sumExpr = FinancialTransactionsTable.amount.sum()
-        FinancialTransactionsTable.select(sumExpr)
-            .where {
-                (FinancialTransactionsTable.accountId eq accountId) and
-                (FinancialTransactionsTable.type eq TransactionType.TRANSFER.name) and
-                (FinancialTransactionsTable.status eq TransactionStatus.PAID.name) and
-                (FinancialTransactionsTable.isActive eq true) and
-                (FinancialTransactionsTable.parentTransactionId.isNull()) and
-                (FinancialTransactionsTable.paymentDate less before.atStartOfDay())
-            }
-            .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
-    }
-
     // RN-04 (PARTIAL): saldo de abertura considera paidAmount de lançamentos PARTIAL antes do período
     private fun sumPartialPaidBefore(accountId: Int, type: TransactionType, before: LocalDate): Money = transaction {
         val sumExpr = FinancialTransactionsTable.paidAmount.sum()
@@ -844,8 +786,8 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
         val income         = paymentRepository.sumCashEffectiveByAccountAndTypeBefore(accountId, TransactionType.INCOME, before)
         val expense        = paymentRepository.sumCashEffectiveByAccountAndTypeBefore(accountId, TransactionType.EXPENSE, before)
         val adjustment     = paymentRepository.sumCashEffectiveByAccountAndTypeBefore(accountId, TransactionType.ADJUSTMENT, before)
-        val transferIn     = sumPaidTransferInBefore(accountId, before)
-        val transferOut    = sumPaidTransferOutBefore(accountId, before)
+        val transferIn     = paymentRepository.sumCashEffectiveTransferInBefore(accountId, before)
+        val transferOut    = paymentRepository.sumCashEffectiveTransferOutBefore(accountId, before)
         val reversalCredit = paymentRepository.sumCashEffectiveForReversalOfBefore(
             accountId, listOf(TransactionType.EXPENSE), before
         )
