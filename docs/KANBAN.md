@@ -469,7 +469,7 @@ _Mova os cards aqui quando começar._
 
 #### Suíte de testes
 
-- [x] Evolução: 131 → 187 → 191 → 200 → 208 → 213 → 231 → 248 → 291 → 294 → 321 → 344 → 351 → 367 → 382 → 386 → **398** testes — confirmado em `./gradlew test` (BUILD SUCCESSFUL)
+- [x] Evolução: 131 → 187 → 191 → 200 → 208 → 213 → 231 → 248 → 291 → 294 → 321 → 344 → 351 → 367 → 382 → 386 → 398 → **410** testes — confirmado em `./gradlew test` (BUILD SUCCESSFUL)
 
 ---
 
@@ -491,7 +491,7 @@ _Mova os cards aqui quando começar._
 - [x] **M2** — dual-write atômico — `TransactionRepository.updateWithPayment()` (C-15); `recordPayment` usa caminho único — commit `ca19d17`
 - [x] **M3** — reconciliação — `findReconciliationDivergences()` + `ReconciliationTest` (4 cenários, portão autorizado) — commit anterior a `ca19d17`
 - [x] **M4** — migrar leituras para `transaction_payments`: `calculateBalance` (Bloco 1), `openingBalance` (Bloco 2), `sumRealized`/`sumRealizedMonth` (Bloco 3), Dashboard KPIs (Bloco 4); `CashInvariantTest` (C-13, 7 testes); `M4_MIGRACAO_LEITURAS.md` — commits `8e15be0` → `a321538`
-- [ ] **M4b** — extrato lista por título, não por baixa; `findStatementEntries` não migrou no M4; Livro Diário TCESP precisa de uma linha por saída de caixa real
+- [x] **M4b** — `findPaymentEntries()` retorna uma linha por baixa ativa, filtrando por `payment_date` da baixa; `StatementViewModel` e `ReportsViewModel` migrados; Livro Diário exibe `cashEffective` e sufixo `(PAGTO N/M)`; `findStatementEntries` preservado para `StatementRoutes` (API); commits `83e10fb` + `571aa8f` + `7e3178e`; doc `M4B_EXTRATO_POR_BAIXA.md`; tag `m4b-extrato-por-baixa`
 - [x] **M5-A** — estorno de baixa individual (D1) + transferência como evento consumado (D5); `reversePayment` + `reversePaymentAndUpdateTitle` (atômico); `assertReversalTransition` (PAID→PENDING/PARTIAL via esta via); `insertTransferPairWithBaixas`; `createTransfer` nasce PAID; guard TRANSFER em `recordPayment`; 16 novos testes; `M5A_ESTORNO_E_TRANSFERENCIA.md` — commits `59aeca5` → `79aab43`
 - [x] **M5-B** — UI de baixas: seção "Baixas" no painel (lista, estorno individual, saldo devedor no rodapé); `PaymentRecordDialog` recebe `outstandingPrincipal` e `discountAmount`; pré-preenche com saldo devedor; campo de desconto com preview "Você quitará"; `TransactionsViewModel` expõe `baixas`, `reversePayment`, `canConfirmPayment`; 10 novos testes (B1-01..04, B2-01..03, B3-01..03); suite 372→382 — tag `m5b-ui-baixas` — commits `8dd83f9` → `6b5f690`
 - [ ] **M5** — UI: diálogo grava baixa; painel lista as baixas
