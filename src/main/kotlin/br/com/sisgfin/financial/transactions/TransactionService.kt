@@ -246,7 +246,7 @@ class TransactionService(
             }
         } else null
 
-        repository.deactivate(id)
+        repository.deactivate(id, existing.version)
         addTimeline(id, TimelineEventType.CANCELED, "Transação cancelada", null, existing.status, TransactionStatus.CANCELED)
         audit("TRANSACTION_CANCELED", id, auditDetail(TransactionStatus.CANCELED, existing.status, existing.amount))
         audit("TRANSACTION_STATUS_CHANGED", id, auditDetail(TransactionStatus.CANCELED, existing.status, existing.amount))
@@ -255,7 +255,7 @@ class TransactionService(
         val isInstallmentParent = (existing.installmentTotal ?: 1) > 1 && existing.parentTransactionId == null
         if (isInstallmentParent) {
             repository.findActiveChildrenOf(id).forEach { child ->
-                repository.deactivate(child.id)
+                repository.deactivate(child.id, child.version)
                 addTimeline(
                     child.id, TimelineEventType.CANCELED,
                     "Cancelada em cascata — parcela ${child.installmentCurrent}/${child.installmentTotal}",
@@ -267,7 +267,7 @@ class TransactionService(
 
         // RN-21: execute counterpart cancellation (already validated above)
         transferCounterpart?.let { other ->
-            repository.deactivate(other.id)
+            repository.deactivate(other.id, other.version)
             addTimeline(
                 other.id, TimelineEventType.CANCELED,
                 "Cancelada em cascata — transferência vinculada #$id",
@@ -644,7 +644,7 @@ class TransactionService(
     fun cancelPendingPayrollForMonth(employeeId: Int, month: YearMonth): Int {
         val toCancel = repository.findPendingPayrollForMonth(employeeId, month)
         toCancel.forEach { tx ->
-            repository.deactivate(tx.id)
+            repository.deactivate(tx.id, tx.version)
             val monthLabel = "${month.monthValue.toString().padStart(2, '0')}/${month.year}"
             addTimeline(tx.id, TimelineEventType.CANCELED,
                 "Cancelado — substituído por importação de folha de pagamento $monthLabel",
@@ -735,7 +735,7 @@ class TransactionService(
             "ofxFitId=$ofxFitId;ofxTxId=$ofxTxId;${auditDetail(TransactionStatus.PAID, manual.status, manual.amount)}")
 
         // Remove o lançamento OFX duplicado (bypass state machine: PAID não transiciona normalmente)
-        repository.deactivate(ofxTxId)
+        repository.deactivate(ofxTxId, ofxEntry.version)
         addTimeline(
             ofxTxId, TimelineEventType.CANCELED,
             "Removido — substituído pela conciliação com lançamento manual #$manualTxId",

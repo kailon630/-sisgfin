@@ -106,11 +106,11 @@ class TransferContainmentTest {
         val sisterTx = transferTx(id = 2, status = TransactionStatus.PENDING, parentId = 1)
         every { repo.findById(1) }               returns mainTx
         every { repo.findTransferDestination(1) } returns sisterTx
-        every { repo.deactivate(any()) }          just Runs
+        every { repo.deactivate(any(), any()) }   just Runs
         val service = makeService(repo = repo)
         service.cancel(1)
-        verify(exactly = 1) { repo.deactivate(1) }
-        verify(exactly = 1) { repo.deactivate(2) }
+        verify(exactly = 1) { repo.deactivate(1, any()) }
+        verify(exactly = 1) { repo.deactivate(2, any()) }
     }
 
     @Test
@@ -122,7 +122,7 @@ class TransferContainmentTest {
         every { repo.findTransferDestination(1) } returns sisterTx
         val service = makeService(repo = repo)
         assertThrows<IllegalStateException> { service.cancel(1) }
-        verify(exactly = 0) { repo.deactivate(any()) }
+        verify(exactly = 0) { repo.deactivate(any(), any()) }
     }
 
     @Test
@@ -134,6 +134,6 @@ class TransferContainmentTest {
         every { repo.findTransferDestination(1) } returns sisterTx
         val service = makeService(repo = repo)
         assertThrows<IllegalStateException> { service.cancel(1) }
-        verify(exactly = 0) { repo.deactivate(any()) }
+        verify(exactly = 0) { repo.deactivate(any(), any()) }
     }
 }

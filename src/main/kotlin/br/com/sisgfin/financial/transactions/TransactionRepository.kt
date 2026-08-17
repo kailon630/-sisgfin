@@ -977,13 +977,18 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             .map { rowToTransaction(it) }
     }
 
-    fun deactivate(id: Int) {
+    fun deactivate(id: Int, version: Int) {
         transaction {
-            FinancialTransactionsTable.update({ FinancialTransactionsTable.id eq id }) {
+            val rows = FinancialTransactionsTable.update({
+                (FinancialTransactionsTable.id eq id) and
+                (FinancialTransactionsTable.version eq version)
+            }) {
                 it[FinancialTransactionsTable.isActive] = false
                 it[FinancialTransactionsTable.status] = TransactionStatus.CANCELED.name
                 it[updatedAt] = LocalDateTime.now()
+                it[FinancialTransactionsTable.version] = version + 1
             }
+            if (rows == 0) throw ConcurrentModificationException("Conflito de versão no lançamento #$id")
         }
     }
 
@@ -1131,15 +1136,28 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
                 TransactionStatus.DRAFT.name,
                 TransactionStatus.SCHEDULED.name
             )
-            FinancialTransactionsTable.update({
-                (FinancialTransactionsTable.recurrenceTemplateId eq templateId) and
-                (FinancialTransactionsTable.dueDate greaterEq from.atStartOfDay()) and
-                (FinancialTransactionsTable.status inList cancelableStatuses) and
-                (FinancialTransactionsTable.isActive eq true)
-            }) {
-                it[FinancialTransactionsTable.isActive] = false
-                it[FinancialTransactionsTable.status]   = TransactionStatus.CANCELED.name
-                it[updatedAt] = LocalDateTime.now()
+            val candidates = FinancialTransactionsTable
+                .select(FinancialTransactionsTable.id, FinancialTransactionsTable.version)
+                .where {
+                    (FinancialTransactionsTable.recurrenceTemplateId eq templateId) and
+                    (FinancialTransactionsTable.dueDate greaterEq from.atStartOfDay()) and
+                    (FinancialTransactionsTable.status inList cancelableStatuses) and
+                    (FinancialTransactionsTable.isActive eq true)
+                }
+                .map { it[FinancialTransactionsTable.id] to it[FinancialTransactionsTable.version] }
+
+            val now = LocalDateTime.now()
+            candidates.forEach { (id, ver) ->
+                val rows = FinancialTransactionsTable.update({
+                    (FinancialTransactionsTable.id eq id) and
+                    (FinancialTransactionsTable.version eq ver)
+                }) {
+                    it[FinancialTransactionsTable.isActive] = false
+                    it[FinancialTransactionsTable.status]   = TransactionStatus.CANCELED.name
+                    it[updatedAt] = now
+                    it[FinancialTransactionsTable.version]  = ver + 1
+                }
+                if (rows == 0) throw ConcurrentModificationException("Conflito de versão no lançamento #$id")
             }
         }
     }

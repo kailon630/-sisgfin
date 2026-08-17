@@ -200,7 +200,7 @@ class TransactionOriginTest {
         val cancelled = service.cancelPendingPayrollForMonth(5, YearMonth.now())
 
         assertEquals(0, cancelled)
-        verify(exactly = 0) { repo.deactivate(any()) }
+        verify(exactly = 0) { repo.deactivate(any(), any()) }
     }
 
     @Test
@@ -217,6 +217,6 @@ class TransactionOriginTest {
         val cancelled = service.cancelPendingPayrollForMonth(5, YearMonth.now())
 
         assertEquals(1, cancelled)
-        verify(exactly = 1) { repo.deactivate(99) }
+        verify(exactly = 1) { repo.deactivate(99, any()) }
     }
 }
