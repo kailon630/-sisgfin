@@ -252,7 +252,10 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
     }
 
     fun updateWithPayment(entity: Transaction, payment: TransactionPayment): Boolean = transaction {
-        FinancialTransactionsTable.update({ FinancialTransactionsTable.id eq entity.id }) {
+        val rows = FinancialTransactionsTable.update({
+            (FinancialTransactionsTable.id eq entity.id) and
+            (FinancialTransactionsTable.version eq entity.version)
+        }) {
             it[FinancialTransactionsTable.type]          = entity.type.name
             it[FinancialTransactionsTable.status]        = entity.status.name
             it[description]                              = entity.description
@@ -281,8 +284,10 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             it[FinancialTransactionsTable.fineAmount]           = entity.fineAmount?.value
             it[FinancialTransactionsTable.projectId]            = entity.projectId
             it[FinancialTransactionsTable.employeeId]           = entity.employeeId
+            it[FinancialTransactionsTable.version]              = entity.version + 1
             // reversedType não é atualizado — define a direção do estorno no saldo (V29) e é imutável
         }
+        if (rows == 0) throw ConcurrentModificationException("Conflito de versão no lançamento #${entity.id}")
 
         val key = payment.idempotencyKey
         if (key != null) {
@@ -455,7 +460,10 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
 
     override fun update(entity: Transaction) {
         transaction {
-            FinancialTransactionsTable.update({ FinancialTransactionsTable.id eq entity.id }) {
+            val rows = FinancialTransactionsTable.update({
+                (FinancialTransactionsTable.id eq entity.id) and
+                (FinancialTransactionsTable.version eq entity.version)
+            }) {
                 it[FinancialTransactionsTable.type] = entity.type.name
                 it[FinancialTransactionsTable.status] = entity.status.name
                 it[description] = entity.description
@@ -484,8 +492,10 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
                 it[FinancialTransactionsTable.fineAmount]           = entity.fineAmount?.value
                 it[FinancialTransactionsTable.projectId]            = entity.projectId
                 it[FinancialTransactionsTable.employeeId]           = entity.employeeId
+                it[FinancialTransactionsTable.version]              = entity.version + 1
                 // reversedType não é atualizado — define a direção do estorno no saldo (V29) e é imutável
             }
+            if (rows == 0) throw ConcurrentModificationException("Conflito de versão no lançamento #${entity.id}")
         }
     }
 
