@@ -431,7 +431,7 @@ _Mova os cards aqui quando começar._
 - [x] **P0-2** — ação "Quitar" oculta para perfil OPERADOR — `PayablesScreen`/`TransactionDetailsPanel` usam `canConfirmPayment()` (RN-12); origem `F2_FIX_P0.md`
 - [x] **P0-3** — `markAsPaidFull` passava `amount` total em vez do saldo restante — agora `recordPayment(id, data, existing.outstandingPrincipal)` (`TransactionService.kt:438`); origem `F2_FIX_P0.md`
 - [x] **P0-4** — acumulação de baixas parciais — `principalPaid` / `outstandingPrincipal` (`Transaction.kt:50-57`); acúmulo em `TransactionService.kt:390-408`; `PartialPaymentAccumulationTest` (9 testes) + `PartialBalanceTest` (11 testes); origem `P0_4_LIQUIDACAO.md`
-- [ ] **P0-5** — encargos (juros/multa) não saem do saldo — **documentado, NÃO corrigido**: `EncargosNoSaldoTest` (4 testes de caracterização) afirmam de propósito o comportamento incorreto; corrigir adiado; origem `P0_5_ENCARGOS_NO_SALDO.md`
+- [x] **P0-5** — encargos (juros/multa) no saldo — **corrigido no M4**: `calculateBalance` agora usa `cashEffective` das baixas (`TransactionPaymentRepository`); `EncargosNoSaldoTest` invertido para comportamento correto (Q5a-Q5d); `RecordPaymentIntegrationTest` CARACTERIZACAO P0-5 atualizados — commit `8e15be0`
 - [x] **V29** — coluna `reversed_type` + backfill a partir de `parent_transaction_id` + índice parcial — corrige R3.2 e R3.4 (`V29__transaction_reversed_type.sql`)
 
 #### Épico E1 — Painel de lançamento — tag `e1-concluido`
@@ -480,10 +480,10 @@ _Mova os cards aqui quando começar._
 
 **Integridade de caixa (E2)** — depende das decisões acima; ordem interna ainda não definida:
 
-- [ ] **M1** — criar `transaction_payments` + backfill
-- [ ] **M2** — dual-write
-- [ ] **M3** — reconciliação (**portão**: query de verificação deve retornar zero linhas)
-- [ ] **M4** — migrar leituras (`sumPartialPaid`, `openingBalance`, Extrato, Livro Diário)
+- [x] **M1** — criar `transaction_payments` + backfill — `TransactionPaymentsTable`, migração SQL, `TransactionPaymentRepository`
+- [x] **M2** — dual-write atômico — `TransactionRepository.updateWithPayment()` (C-15); `recordPayment` usa caminho único — commit `ca19d17`
+- [x] **M3** — reconciliação — `findReconciliationDivergences()` + `ReconciliationTest` (4 cenários, portão autorizado) — commit anterior a `ca19d17`
+- [x] **M4** — migrar leituras para `transaction_payments`: `calculateBalance` (Bloco 1), `openingBalance` (Bloco 2), `sumRealized`/`sumRealizedMonth` (Bloco 3), Dashboard KPIs (Bloco 4); `CashInvariantTest` (C-13, 7 testes); `M4_MIGRACAO_LEITURAS.md` — commits `8e15be0` → `a321538`
 - [ ] **M5** — UI: diálogo grava baixa; painel lista as baixas
 - [ ] **M6** — `paidAmount`
 
