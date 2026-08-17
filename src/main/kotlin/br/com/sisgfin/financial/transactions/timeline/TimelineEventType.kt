@@ -23,5 +23,7 @@ enum class TimelineEventType(val displayLabel: String) {
     // Fase 7-A: recorrência automática
     RECURRENCE_GENERATED("Gerado por recorrência"),
     // Fase 8-C: importação de folha de pagamento
-    PAYROLL_IMPORT("Importado via folha de pagamento")
+    PAYROLL_IMPORT("Importado via folha de pagamento"),
+    // M5-A, D1: estorno de baixa individual (não de título)
+    PAYMENT_REVERSED("Baixa estornada")
 }

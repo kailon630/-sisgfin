@@ -300,13 +300,15 @@ class TransactionService(
         val userId = sessionManager.currentUser.value?.id
         val now = LocalDateTime.now()
 
+        // D5: transferência é evento consumado — nasce PAID com baixas na mesma transação atômica
         val source = Transaction(
             type = TransactionType.TRANSFER,
-            status = TransactionStatus.PENDING,
+            status = TransactionStatus.PAID,
             amount = amount,
             description = description,
             issueDate = now,
             dueDate = date,
+            paymentDate = date,
             accountId = sourceAccountId,
             costCenterId = costCenterId,
             categoryId = categoryId,
@@ -320,16 +322,18 @@ class TransactionService(
             accountId = destinationAccountId,
             description = "Recebimento: $description"
         )
-        val (sourceId, destinationId) = repository.insertTransferPair(source, destinationTemplate)
+        val (sourceId, destinationId) = repository.insertTransferPairWithBaixas(
+            source, destinationTemplate, amount, date, userId
+        )
 
         addTimeline(sourceId, TimelineEventType.TRANSFER_OUT,
             "Transferência de $amount enviada para conta #$destinationAccountId",
-            amount, null, source.status)
+            amount, null, TransactionStatus.PAID)
         audit("TRANSFER_CREATED", sourceId, "source=$sourceAccountId;dest=$destinationAccountId;amount=$amount")
 
         addTimeline(destinationId, TimelineEventType.TRANSFER_IN,
             "Transferência de $amount recebida da conta #$sourceAccountId",
-            amount, null, source.status)
+            amount, null, TransactionStatus.PAID)
         audit("TRANSFER_CREATED", destinationId, "source=$sourceAccountId;dest=$destinationAccountId;amount=$amount;pair=#$sourceId")
 
         return sourceId to destinationId
@@ -393,6 +397,29 @@ class TransactionService(
         return reversalId
     }
 
+    // M5-A, D1: estorno de baixa individual (não de título)
+    fun reversePayment(paymentId: Int, justification: String) {
+        requirePermission(Permission.ConfirmPayment)
+        if (justification.isBlank()) {
+            throw IllegalArgumentException("Justificativa é obrigatória para estorno de baixa.")
+        }
+        val userId = sessionManager.currentUser.value?.id
+        val result = repository.reversePaymentAndUpdateTitle(paymentId, justification, userId)
+        addTimeline(
+            result.transactionId,
+            TimelineEventType.PAYMENT_REVERSED,
+            "Baixa #$paymentId estornada: ${result.originalCashEffective}. Motivo: $justification",
+            result.originalCashEffective,
+            result.previousStatus,
+            result.newStatus
+        )
+        audit(
+            "PAYMENT_REVERSED",
+            result.transactionId,
+            "paymentId=$paymentId;correctionId=${result.correctionId};newStatus=${result.newStatus.name};justification=$justification"
+        )
+    }
+
     // RN-12: visível para o ViewModel controlar botões
     fun canConfirmPayment(): Boolean = sessionManager.hasPermission(Permission.ConfirmPayment)
 
@@ -407,6 +434,10 @@ class TransactionService(
         requirePermission(Permission.ConfirmPayment)
         val existing = repository.findById(id)
             ?: throw IllegalArgumentException("Transação não encontrada.")
+        // D5: transferências nascem PAID via createTransfer; recordPayment não as atende
+        if (existing.type == TransactionType.TRANSFER) {
+            throw IllegalStateException("Transferências não passam por recordPayment. Use createTransfer.")
+        }
         if (!TransactionStateMachine.allowsPayment(existing.status)) {
             throw IllegalStateException("Status ${existing.status.displayName} não permite quitação.")
         }

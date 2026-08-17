@@ -6,12 +6,22 @@ import br.com.sisgfin.financial.money.toMoney
 import br.com.sisgfin.financial.payments.TransactionPayment
 import br.com.sisgfin.financial.payments.TransactionPaymentRepository
 import br.com.sisgfin.financial.payments.TransactionPaymentsTable
+import br.com.sisgfin.financial.transactions.workflow.TransactionStateMachine
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.math.BigDecimal
 import java.sql.SQLException
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.YearMonth
+
+data class PaymentReversalResult(
+    val transactionId: Int,
+    val originalCashEffective: Money,
+    val correctionId: Int,
+    val previousStatus: TransactionStatus,
+    val newStatus: TransactionStatus
+)
 
 class TransactionRepository : MutableEntityRepository<Transaction> {
 
@@ -310,6 +320,136 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
         val destination = destinationTemplate.copy(parentTransactionId = sourceId)
         val destinationId = insert(destination)
         sourceId to destinationId
+    }
+
+    // M5-A, D5: transferência como evento consumado — pernas nascem PAID com baixas na mesma transação
+    fun insertTransferPairWithBaixas(
+        source: Transaction,
+        destinationTemplate: Transaction,
+        amount: Money,
+        paymentDate: LocalDateTime,
+        userId: Int?
+    ): Pair<Int, Int> = transaction {
+        val now = LocalDateTime.now()
+        val sourceId = insert(source)
+        val destination = destinationTemplate.copy(parentTransactionId = sourceId)
+        val destinationId = insert(destination)
+
+        TransactionPaymentsTable.insert {
+            it[TransactionPaymentsTable.transactionId]   = sourceId
+            it[TransactionPaymentsTable.paymentDate]     = paymentDate.toLocalDate()
+            it[TransactionPaymentsTable.accountId]       = source.accountId
+            it[TransactionPaymentsTable.principalAmount] = amount.value
+            it[TransactionPaymentsTable.interestAmount]  = BigDecimal.ZERO
+            it[TransactionPaymentsTable.fineAmount]      = BigDecimal.ZERO
+            it[TransactionPaymentsTable.discountAmount]  = BigDecimal.ZERO
+            it[TransactionPaymentsTable.createdBy]       = userId
+            it[TransactionPaymentsTable.createdAt]       = now
+        }
+
+        TransactionPaymentsTable.insert {
+            it[TransactionPaymentsTable.transactionId]   = destinationId
+            it[TransactionPaymentsTable.paymentDate]     = paymentDate.toLocalDate()
+            it[TransactionPaymentsTable.accountId]       = destinationTemplate.accountId
+            it[TransactionPaymentsTable.principalAmount] = amount.value
+            it[TransactionPaymentsTable.interestAmount]  = BigDecimal.ZERO
+            it[TransactionPaymentsTable.fineAmount]      = BigDecimal.ZERO
+            it[TransactionPaymentsTable.discountAmount]  = BigDecimal.ZERO
+            it[TransactionPaymentsTable.createdBy]       = userId
+            it[TransactionPaymentsTable.createdAt]       = now
+        }
+
+        sourceId to destinationId
+    }
+
+    // M5-A, D1: estorno de baixa individual — atômico, padrão C-15
+    fun reversePaymentAndUpdateTitle(
+        paymentId: Int,
+        justification: String,
+        userId: Int?,
+        now: LocalDateTime = LocalDateTime.now()
+    ): PaymentReversalResult = transaction {
+        val baixaRow = TransactionPaymentsTable.selectAll()
+            .where { TransactionPaymentsTable.id eq paymentId }
+            .firstOrNull()
+            ?: throw IllegalArgumentException("Baixa não encontrada: #$paymentId")
+
+        if (baixaRow[TransactionPaymentsTable.reversedById] != null) {
+            throw IllegalStateException("Baixa #$paymentId já foi estornada.")
+        }
+
+        val transactionId = baixaRow[TransactionPaymentsTable.transactionId]
+        val title = findById(transactionId)
+            ?: throw IllegalArgumentException("Lançamento #$transactionId não encontrado.")
+
+        // Insere marcador de correção com reversed_by_id = paymentId (excluído imediatamente das somas)
+        val correctionId = TransactionPaymentsTable.insert {
+            it[TransactionPaymentsTable.transactionId]   = transactionId
+            it[TransactionPaymentsTable.paymentDate]     = baixaRow[TransactionPaymentsTable.paymentDate]
+            it[TransactionPaymentsTable.accountId]       = baixaRow[TransactionPaymentsTable.accountId]
+            it[TransactionPaymentsTable.principalAmount] = baixaRow[TransactionPaymentsTable.principalAmount]
+            it[TransactionPaymentsTable.interestAmount]  = baixaRow[TransactionPaymentsTable.interestAmount]
+            it[TransactionPaymentsTable.fineAmount]      = baixaRow[TransactionPaymentsTable.fineAmount]
+            it[TransactionPaymentsTable.discountAmount]  = baixaRow[TransactionPaymentsTable.discountAmount]
+            it[TransactionPaymentsTable.reversedById]    = paymentId
+            it[TransactionPaymentsTable.notes]           = justification
+            it[TransactionPaymentsTable.createdBy]       = userId
+            it[TransactionPaymentsTable.createdAt]       = now
+        } get TransactionPaymentsTable.id
+
+        // Fecha referência cruzada — original também excluído das somas
+        TransactionPaymentsTable.update({ TransactionPaymentsTable.id eq paymentId }) {
+            it[TransactionPaymentsTable.reversedById] = correctionId
+        }
+
+        // Recalcula status a partir das baixas ativas restantes
+        val activeBaixas = TransactionPaymentsTable.selectAll()
+            .where {
+                (TransactionPaymentsTable.transactionId eq transactionId) and
+                TransactionPaymentsTable.reversedById.isNull()
+            }
+            .toList()
+
+        val newPrincipal  = activeBaixas.fold(BigDecimal.ZERO) { acc, r -> acc + r[TransactionPaymentsTable.principalAmount] }
+        val newInterest   = activeBaixas.fold(BigDecimal.ZERO) { acc, r -> acc + r[TransactionPaymentsTable.interestAmount] }
+        val newFine       = activeBaixas.fold(BigDecimal.ZERO) { acc, r -> acc + r[TransactionPaymentsTable.fineAmount] }
+        val totalDiscount = activeBaixas.fold(BigDecimal.ZERO) { acc, r -> acc + r[TransactionPaymentsTable.discountAmount] }
+        val newPaidAmount    = newPrincipal + newInterest + newFine
+        val principalQuitado = newPrincipal + totalDiscount
+
+        val newStatus = when {
+            principalQuitado.compareTo(title.amount.value) >= 0 -> TransactionStatus.PAID
+            principalQuitado.compareTo(BigDecimal.ZERO) > 0    -> TransactionStatus.PARTIAL
+            LocalDate.now().isAfter(title.dueDate.toLocalDate()) -> TransactionStatus.OVERDUE
+            else -> TransactionStatus.PENDING
+        }
+
+        TransactionStateMachine.assertReversalTransition(title.status, newStatus)
+
+        val updated = title.copy(
+            status         = newStatus,
+            paidAmount     = if (newPaidAmount.compareTo(BigDecimal.ZERO) == 0) null else newPaidAmount.toMoney(),
+            interestAmount = if (newInterest.compareTo(BigDecimal.ZERO) == 0) null else newInterest.toMoney(),
+            fineAmount     = if (newFine.compareTo(BigDecimal.ZERO) == 0) null else newFine.toMoney(),
+            paymentDate    = if (newStatus == TransactionStatus.PAID) title.paymentDate else null,
+            updatedAt      = now
+        )
+        update(updated)
+
+        val originalCashEffective = (
+            baixaRow[TransactionPaymentsTable.principalAmount] +
+            baixaRow[TransactionPaymentsTable.interestAmount] +
+            baixaRow[TransactionPaymentsTable.fineAmount] -
+            baixaRow[TransactionPaymentsTable.discountAmount]
+        ).toMoney()
+
+        PaymentReversalResult(
+            transactionId         = transactionId,
+            originalCashEffective = originalCashEffective,
+            correctionId          = correctionId,
+            previousStatus        = title.status,
+            newStatus             = newStatus
+        )
     }
 
     override fun update(entity: Transaction) {

@@ -75,6 +75,26 @@ object TransactionStateMachine {
 
     fun allowsDuplicate(status: TransactionStatus): Boolean = true
 
+    /**
+     * Transição exclusiva para estorno de baixa individual (M5-A, D1).
+     * PAID deixa de ser terminal por esta via — a baixa errada é anulada
+     * e o status recalculado das baixas restantes pode ser qualquer não-terminal.
+     * Não altera assertTransition, preservando a RN-13 para todos os caminhos normais.
+     */
+    fun assertReversalTransition(from: TransactionStatus, to: TransactionStatus) {
+        if (from == to) return
+        if (from == TransactionStatus.CANCELED) {
+            throw IllegalStateException(
+                "Estorno de baixa não altera lançamento CANCELED: ${from.name} → ${to.name}"
+            )
+        }
+        if (to == TransactionStatus.CANCELED) {
+            throw IllegalStateException(
+                "Estorno de baixa não pode produzir status CANCELED."
+            )
+        }
+    }
+
     fun resolveStatusAfterPayment(
         totalAmount: java.math.BigDecimal,
         paidAmount: java.math.BigDecimal
