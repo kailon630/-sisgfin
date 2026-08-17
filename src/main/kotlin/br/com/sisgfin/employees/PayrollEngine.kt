@@ -13,7 +13,8 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val monthFmt = DateTimeFormatter.ofPattern("MMMM/yyyy", Locale("pt", "BR"))
+private val monthFmt       = DateTimeFormatter.ofPattern("MMMM/yyyy", Locale("pt", "BR"))
+private val competenciaFmt = DateTimeFormatter.ofPattern("MM/yyyy")
 
 data class PayrollGenerationResult(
     val generated: Int,
@@ -45,19 +46,21 @@ class PayrollEngine(
                         skipped++
                         continue
                     }
-                    val monthLabel = yearMonth.format(monthFmt)
-                        .replaceFirstChar { it.uppercase() }
+                    val monthLabel  = yearMonth.format(monthFmt).replaceFirstChar { it.uppercase() }
+                    val competencia = yearMonth.format(competenciaFmt)
                     transactionService.create(
                         Transaction(
-                            type        = TransactionType.EXPENSE,
-                            status      = TransactionStatus.PENDING,
-                            description = "Pagamento ${employee.name} — $monthLabel",
-                            amount      = employee.salary,
-                            issueDate   = LocalDateTime.now(),
-                            dueDate     = dueDate.atStartOfDay(),
-                            accountId   = defaultAccountId,
-                            employeeId  = employee.id,
-                            origin      = TransactionOrigin.PAYROLL_ENGINE
+                            type           = TransactionType.EXPENSE,
+                            status         = TransactionStatus.PENDING,
+                            description    = "Pagamento ${employee.name} — $monthLabel",
+                            amount         = employee.salary,
+                            issueDate      = LocalDateTime.now(),
+                            dueDate        = dueDate.atStartOfDay(),
+                            accountId      = defaultAccountId,
+                            employeeId     = employee.id,
+                            origin         = TransactionOrigin.PAYROLL_ENGINE,
+                            documentType   = "FOLHA",
+                            documentNumber = competencia
                         )
                     )
                     generated++
@@ -89,18 +92,21 @@ class PayrollEngine(
                     skipped++
                     continue
                 }
-                val monthLabel = yearMonth.format(monthFmt).replaceFirstChar { it.uppercase() }
+                val monthLabel  = yearMonth.format(monthFmt).replaceFirstChar { it.uppercase() }
+                val competencia = yearMonth.format(competenciaFmt)
                 transactionService.create(
                     Transaction(
-                        type        = TransactionType.EXPENSE,
-                        status      = TransactionStatus.PENDING,
-                        description = "Pagamento ${employee.name} — $monthLabel",
-                        amount      = employee.salary,
-                        issueDate   = LocalDateTime.now(),
-                        dueDate     = dueDate.atStartOfDay(),
-                        accountId   = defaultAccountId,
-                        employeeId  = employee.id,
-                        origin      = TransactionOrigin.PAYROLL_ENGINE
+                        type           = TransactionType.EXPENSE,
+                        status         = TransactionStatus.PENDING,
+                        description    = "Pagamento ${employee.name} — $monthLabel",
+                        amount         = employee.salary,
+                        issueDate      = LocalDateTime.now(),
+                        dueDate        = dueDate.atStartOfDay(),
+                        accountId      = defaultAccountId,
+                        employeeId     = employee.id,
+                        origin         = TransactionOrigin.PAYROLL_ENGINE,
+                        documentType   = "FOLHA",
+                        documentNumber = competencia
                     )
                 )
                 generated++
