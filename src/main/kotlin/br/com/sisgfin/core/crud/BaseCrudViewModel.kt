@@ -133,22 +133,22 @@ abstract class BaseCrudViewModel<T : Identifiable>(
     private fun saveInternal(item: T) {
         viewModelScope.launch {
             updateState { it.copy(isLoading = true, error = null) }
-            val result = withContext(Dispatchers.IO) {
-                runCatching { operations.save(item) }
-                    .fold(
-                        onSuccess = { Result.Success(Unit) },
-                        onFailure = { Result.Error(br.com.sisgfin.core.errors.ErrorClassifier.classify(it)) }
-                    )
+            val exception = withContext(Dispatchers.IO) {
+                runCatching { operations.save(item) }.exceptionOrNull()
             }
-            when (result) {
-                is Result.Success -> {
+            when {
+                exception == null -> {
                     updateState { it.copy(isLoading = false, isDirty = false, isDialogVisible = false) }
                     _events.emit(CrudEvent.OperationSuccess("Registro salvo com sucesso."))
                     onSaveSuccess()
                     loadInternal()
                 }
-                is Result.Error -> handleError(result.error, restoreLoading = true)
-                is Result.Validation -> handleError(result.errorOrNull()!!, restoreLoading = true)
+                exception is ConcurrentModificationException -> {
+                    val msg = exception.message ?: "Lançamento alterado por outro usuário. Dados recarregados."
+                    handleError(br.com.sisgfin.core.errors.AppError.Operational(msg), restoreLoading = true)
+                    loadInternal()
+                }
+                else -> handleError(br.com.sisgfin.core.errors.ErrorClassifier.classify(exception), restoreLoading = true)
             }
         }
     }

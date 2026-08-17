@@ -114,8 +114,10 @@ fun Route.transactionRoutes(
             }.getOrElse {
                 return@put call.respond(HttpStatusCode.BadRequest, ErrorResponse("Dados inválidos: ${it.message}"))
             }
-            runCatching { sessionManager.withApiUser(user) { service.update(updated) } }.getOrElse {
-                return@put call.respond(HttpStatusCode.UnprocessableEntity, ErrorResponse(it.message ?: "Erro ao atualizar"))
+            runCatching { sessionManager.withApiUser(user) { service.update(updated) } }.getOrElse { ex ->
+                if (ex is ConcurrentModificationException)
+                    return@put call.respond(HttpStatusCode.Conflict, ErrorResponse(ex.message ?: "Conflito de versão"))
+                return@put call.respond(HttpStatusCode.UnprocessableEntity, ErrorResponse(ex.message ?: "Erro ao atualizar"))
             }
             call.respond(HttpStatusCode.OK, MessageResponse("Transação atualizada"))
         }
