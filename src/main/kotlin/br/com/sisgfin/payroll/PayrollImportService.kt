@@ -18,7 +18,8 @@ class PayrollImportService(
     private val transactionService: TransactionService
 ) {
     private val parser = PayrollXlsxParser()
-    private val monthFmt = DateTimeFormatter.ofPattern("MMM/yyyy", Locale.forLanguageTag("pt-BR"))
+    private val monthFmt       = DateTimeFormatter.ofPattern("MMM/yyyy", Locale.forLanguageTag("pt-BR"))
+    private val competenciaFmt = DateTimeFormatter.ofPattern("MM/yyyy")
 
     /**
      * Analisa o arquivo XLSX e enriquece cada entrada com lookup de CPF no BD.
@@ -80,7 +81,8 @@ class PayrollImportService(
         costCenterId: Int?,
         userId: Int
     ): Int {
-        val monthLabel = result.referenceMonth.format(monthFmt).uppercase()
+        val monthLabel  = result.referenceMonth.format(monthFmt).uppercase()
+        val competencia = result.referenceMonth.format(competenciaFmt)
         var created = 0
 
         result.entries.filter { it.employeeFound }.forEach { entry ->
@@ -93,17 +95,19 @@ class PayrollImportService(
             if (!entry.adiantamento.isZero()) {
                 transactionService.createFromPayrollImport(
                     Transaction(
-                        type = TransactionType.EXPENSE,
-                        status = TransactionStatus.PENDING,
-                        description = "Adiantamento $monthLabel — ${entry.nome}",
-                        amount = entry.adiantamento,
-                        issueDate = now,
-                        dueDate = entry.adiantamentoDueDate.atStartOfDay(),
-                        accountId = accountId,
-                        costCenterId = costCenterId,
-                        categoryId = categoryId,
-                        employeeId = entry.employeeId,
-                        createdBy = userId
+                        type           = TransactionType.EXPENSE,
+                        status         = TransactionStatus.PENDING,
+                        description    = "Adiantamento $monthLabel — ${entry.nome}",
+                        amount         = entry.adiantamento,
+                        issueDate      = now,
+                        dueDate        = entry.adiantamentoDueDate.atStartOfDay(),
+                        accountId      = accountId,
+                        costCenterId   = costCenterId,
+                        categoryId     = categoryId,
+                        employeeId     = entry.employeeId,
+                        createdBy      = userId,
+                        documentType   = "FOLHA",
+                        documentNumber = "$competencia-ADT"
                     )
                 )
                 created++
@@ -112,17 +116,19 @@ class PayrollImportService(
             // 2ª parcela: Salário (líquido) — sempre criado
             transactionService.createFromPayrollImport(
                 Transaction(
-                    type = TransactionType.EXPENSE,
-                    status = TransactionStatus.PENDING,
-                    description = "Salário $monthLabel — ${entry.nome}",
-                    amount = entry.liquido,
-                    issueDate = now,
-                    dueDate = entry.liquidoDueDate.atStartOfDay(),
-                    accountId = accountId,
-                    costCenterId = costCenterId,
-                    categoryId = categoryId,
-                    employeeId = entry.employeeId,
-                    createdBy = userId
+                    type           = TransactionType.EXPENSE,
+                    status         = TransactionStatus.PENDING,
+                    description    = "Salário $monthLabel — ${entry.nome}",
+                    amount         = entry.liquido,
+                    issueDate      = now,
+                    dueDate        = entry.liquidoDueDate.atStartOfDay(),
+                    accountId      = accountId,
+                    costCenterId   = costCenterId,
+                    categoryId     = categoryId,
+                    employeeId     = entry.employeeId,
+                    createdBy      = userId,
+                    documentType   = "FOLHA",
+                    documentNumber = competencia
                 )
             )
             created++
