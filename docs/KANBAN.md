@@ -452,7 +452,7 @@ _Mova os cards aqui quando começar._
 - [x] **`BuildTcespDescTest`** — 8 testes
 - Origem: `R8_CREDOR_LIVRO_DIARIO.md` (achados R8.1, R8.3, R8.7)
 
-#### C-11 — Orçamento × estorno — commit `58a0e45` (tag `c11-orcamento-estorno` **não criada** no repo; evidência = commit + código)
+#### C-11 — Orçamento × estorno — commit `58a0e45` (tag `c11-orcamento-estorno`)
 
 - [x] **`sumRealized` / `sumRealizedMonth`** deixam de dobrar o realizado no estorno — subtraem REVERSAL com `reversedType` = EXPENSE (`BudgetItemRepository.kt:107-164`)
 - [x] **Demonstrativo** — REVERSAL abate a coluna de origem via `reversed_type` (`ReportsViewModel.kt:157-167`)
@@ -462,21 +462,21 @@ _Mova os cards aqui quando começar._
 
 #### Suíte de testes
 
-- [x] Evolução: 131 → 187 → 191 → 200 → 208 → **213** testes — confirmado em `./gradlew test` (BUILD SUCCESSFUL)
+- [x] Evolução: 131 → 187 → 191 → 200 → 208 → 213 → 231 → 248 → 291 → 294 → 321 → 344 → 351 → **367** testes — confirmado em `./gradlew test` (BUILD SUCCESSFUL)
 
 ---
 
 #### Pendente — Frente Arquitetural ago/2026
 
+> ⚠ **S-08 — Backup automático (Fase 5) continua pendente e sem fila.** É a maior exposição do projeto: sistema de prestação de contas de convênio público sem rotina de backup. Deveria estar acima de tudo nesta lista.
+
 **Bloqueado por decisão de negócio** (nada começa antes destas respostas):
 
-> ⚠ **Backup automático (Fase 5) continua pendente e sem fila.** É a maior exposição do projeto: sistema de prestação de contas de convênio público sem rotina de backup. Deveria estar acima de tudo nesta lista.
-
-- [ ] **D1** — estorno de baixa × estorno de título — origem `SPEC_TRANSACTION_PAYMENTS.md`
+- [x] **D1** — estorno de baixa × estorno de título — **RESOLVIDO**: estorno de baixa individual usa `reversed_by_id` + baixa de correção, sem REVERSAL; estorno de título é atalho que estorna todas as baixas ativas e cria REVERSAL; consequência: PAID deixa de ser terminal — estornar a única baixa devolve o título a PENDING; state machine precisará permitir PAID → PENDING/PARTIAL por essa via
 - [ ] **D2** — baixa em conta diferente da do título — origem `SPEC_TRANSACTION_PAYMENTS.md`
-- [ ] **D3** — desconto quita o principal? — **aguarda contador; bloqueia M1** — origem `SPEC_TRANSACTION_PAYMENTS.md`
+- [x] **D3** — desconto quita o principal — **RESOLVIDO**: `principalQuitado = Σ(principal + desconto)`; na rubrica, desconto reduz a despesa orçamentária (D3b implementado em M4)
 - [ ] **D4** — fechamento de período — origem `SPEC_TRANSACTION_PAYMENTS.md`
-- [ ] **D5** — semântica da transferência — **novo, do C-01** — origem `C00_C01_TRANSFERENCIA_E_SPEC.md`
+- [x] **D5** — semântica da transferência — **RESOLVIDA**: transferência é evento consumado, nasce PAID; `createTransfer()` atualizado em `3327126` (tag `c15-transfer-atomico`)
 
 **Integridade de caixa (E2)** — depende das decisões acima; ordem interna ainda não definida:
 
@@ -484,8 +484,11 @@ _Mova os cards aqui quando começar._
 - [x] **M2** — dual-write atômico — `TransactionRepository.updateWithPayment()` (C-15); `recordPayment` usa caminho único — commit `ca19d17`
 - [x] **M3** — reconciliação — `findReconciliationDivergences()` + `ReconciliationTest` (4 cenários, portão autorizado) — commit anterior a `ca19d17`
 - [x] **M4** — migrar leituras para `transaction_payments`: `calculateBalance` (Bloco 1), `openingBalance` (Bloco 2), `sumRealized`/`sumRealizedMonth` (Bloco 3), Dashboard KPIs (Bloco 4); `CashInvariantTest` (C-13, 7 testes); `M4_MIGRACAO_LEITURAS.md` — commits `8e15be0` → `a321538`
+- [ ] **M4b** — extrato lista por título, não por baixa; `findStatementEntries` não migrou no M4; Livro Diário TCESP precisa de uma linha por saída de caixa real
+- [x] **M5-A** — estorno de baixa individual (D1) + transferência como evento consumado (D5); `reversePayment` + `reversePaymentAndUpdateTitle` (atômico); `assertReversalTransition` (PAID→PENDING/PARTIAL via esta via); `insertTransferPairWithBaixas`; `createTransfer` nasce PAID; guard TRANSFER em `recordPayment`; 16 novos testes; `M5A_ESTORNO_E_TRANSFERENCIA.md` — commits `59aeca5` → `79aab43`
 - [ ] **M5** — UI: diálogo grava baixa; painel lista as baixas
 - [ ] **M6** — `paidAmount`
+- [ ] **C-18** — sem teste de integração do JOIN `parentTransactionId` em `sumCashEffectiveForReversalOf`; os testes atuais são unitários sobre `AccountBalanceFormula`
 
 ---
 
@@ -499,15 +502,16 @@ _Mova os cards aqui quando começar._
 - [x] **T-09** — `validateEmployee()` em `TransactionService`; funcionário inativo bloqueado análogo à RN-02 — `15007e9`
 - [x] **T-10** — UNIQUE em `employees.document` (V31); verificação cruzada CPF/CNPJ entre `employees` e `suppliers` — `60e15a5`
 - [x] **T-15** — `EmploymentType` grava `.name`; V31 normaliza dados existentes; `EmployeesScreen` resolve por `.name` com fallback `.label` — `60e15a5`
-- [ ] **T-07** — exibir beneficiário no Resumo quando só há `employeeId` — hoje `supplierName = suppliers.find { it.id == item.supplierId }?.name` (`TransactionDetailsPanel.kt:95`), linha "Fornecedor" some; origem R1.1
-- [ ] **C-16** — `PayrollImportService.findByCpf()` não filtra funcionários inativos; pode vincular folha importada a funcionário desligado — gap identificado no bloco seletor-credor
-- [ ] **S-08** — revalidar `CounterpartyMap.nameFor()` no Livro Diário após virar o seletor de credor: precedência agora é `supplierId → employeeId` (inversa do SPEC antigo); SPEC F5 atualizado em `seletor-credor`
+- [x] **T-07** — exibir beneficiário no Resumo quando só há `employeeId` — commit `0f2d830` (tag `t-conformidade-residual`)
+- [ ] **C-16** — sem teste de integração de atomicidade real de `insertTransferPairWithBaixas`; precisa de banco em memória
+- [ ] **C-17** — `PayrollImportService.findByCpf()` não filtra funcionários inativos; pode vincular folha importada a funcionário desligado — gap identificado no bloco seletor-credor
+- [ ] **S-10** — revalidar `CounterpartyMap.nameFor()` no Livro Diário após virar o seletor de credor: precedência agora é `supplierId → employeeId` (inversa do SPEC antigo); SPEC F5 atualizado em `seletor-credor`
 
 #### Conformidade TCESP restante
 
 - [ ] **T-03** — `CF [DOC]` ausente em todos os lançamentos de folha — `PayrollEngine.kt:49-59` e `PayrollImportService.kt:94-127` não preenchem `documentType`/`documentNumber`; origem R8.2
-- [ ] **T-05** — extrato Excel com coluna FORNECEDOR vazia hardcoded (`StatementExporter.kt:99`); `StatementViewModel` não carrega suppliers nem employees; origem R8
-- [ ] **T-11** — `CounterpartyResolver.resolve()` calcula os ids mas carrega as tabelas inteiras via `findAll()`/`getAll()`; origem R8
+- [x] **T-05** — extrato Excel com coluna FORNECEDOR — commit `0f2d830` (tag `t-conformidade-residual`)
+- [x] **T-11** — `CounterpartyResolver.resolve()` otimizado — commit `0f2d830` (tag `t-conformidade-residual`)
 - [ ] **T-12** — saneamento de dados: lançamentos PAID sem fornecedor nem funcionário agora exibem "CREDOR NÃO IDENTIFICADO" no Livro Diário — contar e tratar antes da próxima prestação de contas
 - [ ] **R6.1 / R7.3** — folha gerada pelo `PayrollEngine` sem centro de custo nem categoria (0% de classificação na base); origem `R6_CLASSIFICACAO.md`
 - [ ] **R2.2** — não existe caminho de remessa bancária para fornecedor; `PayrollBankExporter` lê exclusivamente `employees` (V25); origem `R2_DADOS_BANCARIOS.md`
@@ -517,11 +521,11 @@ _Mova os cards aqui quando começar._
 
 > `createTransfer()` cria as duas pernas em PENDING, `calculateBalance` só conta pernas PAID, e não existe cascata de quitação.
 
-- [ ] **Contenção imediata** — bloquear `duplicate()` em lançamentos TRANSFER e fazer a cascata de cancelamento falhar com erro visível em vez de silêncio; **não depende de decisão de negócio**, pode ser feito antes do D5
-- [ ] **Saldo não movimenta** enquanto as pernas estão PENDING; quitar apenas uma perna produz saldo assimétrico (dinheiro sai de uma conta sem chegar na outra, ou aparece do nada)
-- [ ] **Cascata de cancelamento falha em silêncio** — `allowsCancel(other.status)` é falso para PAID e o código apenas pula, sem exceção e sem log (`TransactionService.kt:201-243`); dinheiro fica fora das duas contas
-- [ ] **Perna PAID não pode ser cancelada nem estornada** — `ReversalEligibility` bloqueia TRANSFER e PAID é terminal; único conserto é ADJUSTMENT manual; origem R7.7
-- [ ] **`duplicate()` inverte a direção** — duplicata da perna de origem recebe `parentTransactionId` preenchido e passa a ser contada como *entrada* por `sumPaidTransferIn`; `allowsDuplicate` não bloqueia nenhum status
+- [x] **Contenção imediata** — `duplicate()` bloqueado em TRANSFER; cascata de cancelamento falha com erro visível — commit `507f294` (tag `contencao-transferencia`)
+- [x] **Saldo não movimenta** enquanto pernas PENDING — resolvido via D5: transferência nasce PAID (`3327126`, tag `c15-transfer-atomico`)
+- [x] **Cascata de cancelamento falha em silêncio** — commit `507f294` (tag `contencao-transferencia`)
+- [x] **Perna PAID não pode ser cancelada nem estornada** — resolvido via D5: pernas nascem PAID, não há cascata de cancelamento necessária
+- [x] **`duplicate()` inverte a direção** — commit `507f294` (tag `contencao-transferencia`)
 - [ ] **Pernas TRANSFER viram OVERDUE** e aparecem no chip "A pagar" — `OverdueEngine` e `filterActionRequired` não filtram por tipo
 - [ ] **Sem teste de lifecycle de saldo** — `TransferAndReversalTest` cobre validações e elegibilidade, mas nenhum teste cria o par via `createTransfer()` e verifica `calculateBalance()` nas duas contas
 
@@ -539,6 +543,7 @@ _Mova os cards aqui quando começar._
 - [ ] **S-05** — soft delete altera saldo sem transição de estado nem evento
 - [ ] **S-06** — índices compostos para as agregações; sem índice em `payment_date`, usado pelo saldo de abertura
 - [ ] **S-07** — `recordPayment()` grava dois registros de auditoria por baixa
+- [ ] **S-09** — seis ViewModels com dependência nullable+default que o Koin sempre injeta (TransactionsViewModel ×4, ReportsViewModel, StatementViewModel); mesmo padrão corrigido em TransactionService
 - [ ] **R5.1** — chip "A pagar" mistura receitas e despesas
 - [ ] **R5.3** — sem totalizadores na listagem de Movimentações
 - [ ] **R5.4** — grupos usam `dueDate`, Extrato usa `paymentDate`, sem seletor
