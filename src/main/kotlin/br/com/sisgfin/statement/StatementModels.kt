@@ -1,6 +1,8 @@
 package br.com.sisgfin.statement
 
 import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.payments.PaymentEntry
+import br.com.sisgfin.financial.payments.TransactionPayment
 import br.com.sisgfin.financial.transactions.Transaction
 import br.com.sisgfin.financial.transactions.TransactionType
 import java.time.LocalDate
@@ -17,18 +19,22 @@ data class StatementFilter(
 
 data class StatementEntry(
     val transaction: Transaction,
+    val payment: TransactionPayment,
     val signedAmount: Money,   // positivo = crédito, negativo = débito
     val runningBalance: Money
 ) {
     val isCredit: Boolean get() = signedAmount.isPositive()
 }
 
-fun signedAmount(tx: Transaction): Money = when (tx.type) {
-    TransactionType.INCOME,
-    TransactionType.REVERSAL,
-    TransactionType.ADJUSTMENT -> tx.paidAmount ?: tx.amount
-    TransactionType.EXPENSE -> (tx.paidAmount ?: tx.amount).negate()
-    TransactionType.TRANSFER ->
-        if (tx.parentTransactionId != null) tx.paidAmount ?: tx.amount   // entrada
-        else (tx.paidAmount ?: tx.amount).negate()                        // saída
+fun signedAmount(pe: PaymentEntry): Money {
+    val cash = pe.payment.cashEffective
+    return when (pe.transaction.type) {
+        TransactionType.INCOME,
+        TransactionType.REVERSAL,
+        TransactionType.ADJUSTMENT -> cash
+        TransactionType.EXPENSE -> cash.negate()
+        TransactionType.TRANSFER ->
+            if (pe.transaction.parentTransactionId != null) cash   // entrada
+            else cash.negate()                                      // saída
+    }
 }

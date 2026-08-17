@@ -90,9 +90,8 @@ object StatementExporter {
         entries.forEach { entry ->
             val tx = entry.transaction
             val row = sheet.createRow(rowIdx++)
-            val payDate = tx.paymentDate ?: tx.dueDate
 
-            row.createCell(0).also { it.setCellValue(payDate.format(dateFmt)); it.cellStyle = dateFormat }
+            row.createCell(0).also { it.setCellValue(entry.payment.paymentDate.format(dateFmt)); it.cellStyle = dateFormat }
             row.createCell(1).setCellValue(tx.description)
             row.createCell(2).setCellValue(tx.type.displayName)
             row.createCell(3).setCellValue(
@@ -216,7 +215,7 @@ object StatementExporter {
                 y = pageH - margin
             }
             val tx = entry.transaction
-            val payDate = (tx.paymentDate ?: tx.dueDate).format(dateFmt)
+            val payDate = entry.payment.paymentDate.format(dateFmt)
             val desc = tx.description.take(35)
             val docLabel = listOfNotNull(tx.documentType, tx.documentNumber).joinToString(" ").take(12)
             val (dr, dg, db) = if (entry.isCredit) Triple(0.1f, 0.5f, 0.1f) else Triple(0.8f, 0.1f, 0.1f)

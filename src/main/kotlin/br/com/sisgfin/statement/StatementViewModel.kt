@@ -106,7 +106,7 @@ class StatementViewModel(
                         account.initialBalance
                     }
 
-                    val raw = transactionRepository.findStatementEntries(
+                    val raw = transactionRepository.findPaymentEntries(
                         accountId = accountId,
                         from = filter.from,
                         to = filter.to,
@@ -116,12 +116,12 @@ class StatementViewModel(
                         projectId = filter.projectId
                     )
 
-                    val counterpartyMap = counterpartyResolver.resolve(raw)
+                    val counterpartyMap = counterpartyResolver.resolve(raw.map { it.transaction })
                     var running = opening
-                    val entries = raw.map { tx ->
-                        val signed = signedAmount(tx)
+                    val entries = raw.map { pe ->
+                        val signed = signedAmount(pe)
                         running = running + signed
-                        StatementEntry(tx, signed, running)
+                        StatementEntry(pe.transaction, pe.payment, signed, running)
                     }
                     Triple(opening, entries, counterpartyMap)
                 }

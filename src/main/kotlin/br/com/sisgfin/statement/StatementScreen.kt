@@ -338,7 +338,7 @@ private fun StatementTable(state: StatementUiState) {
 @Composable
 private fun StatementRow(entry: StatementEntry) {
     val tx = entry.transaction
-    val payDate = (tx.paymentDate ?: tx.dueDate).format(dateFmt)
+    val payDate = entry.payment.paymentDate.format(dateFmt)
     val docLabel = listOfNotNull(tx.documentType, tx.documentNumber).joinToString(" ").ifBlank { "—" }
     val amountColor = if (entry.isCredit) WsSuccess else WsDanger
     val balanceColor = if (entry.runningBalance.isNegative()) WsDanger

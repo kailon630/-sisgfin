@@ -2,6 +2,7 @@ package br.com.sisgfin.statement
 
 import br.com.sisgfin.FinancialAccount
 import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.payments.TransactionPayment
 import br.com.sisgfin.financial.transactions.CounterpartyMap
 import br.com.sisgfin.financial.transactions.Transaction
 import br.com.sisgfin.financial.transactions.TransactionStatus
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import java.nio.file.Path
+import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlin.test.assertEquals
 
@@ -38,9 +40,17 @@ class StatementExporterCounterpartyTest {
     )
 
     private fun entry(tx: Transaction, balance: Money = Money.fromString("1000.00")): StatementEntry {
-        val signed = if (tx.type == TransactionType.INCOME) tx.paidAmount ?: tx.amount
-                     else (tx.paidAmount ?: tx.amount).negate()
-        return StatementEntry(tx, signed, balance)
+        val amount = tx.paidAmount ?: tx.amount
+        val signed = if (tx.type == TransactionType.INCOME) amount else amount.negate()
+        val payment = TransactionPayment(
+            id              = 0,
+            transactionId   = tx.id,
+            paymentDate     = tx.paymentDate?.toLocalDate() ?: LocalDate.of(2026, 1, 20),
+            accountId       = tx.accountId,
+            principalAmount = amount,
+            createdAt       = tx.paymentDate ?: LocalDateTime.of(2026, 1, 20, 0, 0)
+        )
+        return StatementEntry(tx, payment, signed, balance)
     }
 
     @Test
