@@ -247,6 +247,7 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             it[FinancialTransactionsTable.projectId]            = entity.projectId
             it[FinancialTransactionsTable.reversedType]         = entity.reversedType?.name
             it[FinancialTransactionsTable.origin]               = entity.origin.name
+            it[FinancialTransactionsTable.version]              = 0
         } get FinancialTransactionsTable.id
     }
 
@@ -1015,7 +1016,8 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
         fineAmount            = row[FinancialTransactionsTable.fineAmount]?.toMoney(),
         projectId             = row[FinancialTransactionsTable.projectId],
         reversedType          = row[FinancialTransactionsTable.reversedType]?.let { TransactionType.valueOf(it) },
-        origin                = runCatching { TransactionOrigin.valueOf(row[FinancialTransactionsTable.origin]) }.getOrDefault(TransactionOrigin.MANUAL)
+        origin                = runCatching { TransactionOrigin.valueOf(row[FinancialTransactionsTable.origin]) }.getOrDefault(TransactionOrigin.MANUAL),
+        version               = row[FinancialTransactionsTable.version]
     )
 
     // Fase 7-B: soma paidAmount das transações PAID vinculadas ao contrato
