@@ -9,6 +9,7 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.math.BigDecimal
 import java.sql.SQLException
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 class TransactionPaymentRepository {
@@ -145,6 +146,82 @@ class TransactionPaymentRepository {
                 (FinancialTransactionsTable.status eq TransactionStatus.PAID.name) and
                 (FinancialTransactionsTable.isActive eq true) and
                 (FinancialTransactionsTable.reversedType inList originalTypes.map { it.name }) and
+                TransactionPaymentsTable.reversedById.isNull()
+            }
+            .fold(BigDecimal.ZERO) { acc, row ->
+                acc +
+                row[TransactionPaymentsTable.principalAmount] +
+                row[TransactionPaymentsTable.interestAmount] +
+                row[TransactionPaymentsTable.fineAmount] -
+                row[TransactionPaymentsTable.discountAmount]
+            }
+            .toMoney()
+    }
+
+    /**
+     * M4 Bloco 2 — saldo de abertura via cashEffective antes de uma data.
+     * Filtra por p.payment_date < before (data da baixa, não do título).
+     */
+    fun sumCashEffectiveByAccountAndTypeBefore(
+        accountId: Int,
+        type: TransactionType,
+        before: LocalDate
+    ): Money = transaction {
+        TransactionPaymentsTable
+            .join(FinancialTransactionsTable, JoinType.INNER,
+                onColumn = TransactionPaymentsTable.transactionId,
+                otherColumn = FinancialTransactionsTable.id)
+            .select(
+                TransactionPaymentsTable.principalAmount,
+                TransactionPaymentsTable.interestAmount,
+                TransactionPaymentsTable.fineAmount,
+                TransactionPaymentsTable.discountAmount
+            )
+            .where {
+                (FinancialTransactionsTable.accountId eq accountId) and
+                (FinancialTransactionsTable.type eq type.name) and
+                (FinancialTransactionsTable.isActive eq true) and
+                TransactionPaymentsTable.reversedById.isNull() and
+                (TransactionPaymentsTable.paymentDate less before)
+            }
+            .fold(BigDecimal.ZERO) { acc, row ->
+                acc +
+                row[TransactionPaymentsTable.principalAmount] +
+                row[TransactionPaymentsTable.interestAmount] +
+                row[TransactionPaymentsTable.fineAmount] -
+                row[TransactionPaymentsTable.discountAmount]
+            }
+            .toMoney()
+    }
+
+    /**
+     * M4 Bloco 2 — crédito/débito de estorno no saldo de abertura.
+     * Filtra por data de pagamento do estorno (reversal.paymentDate < before).
+     */
+    fun sumCashEffectiveForReversalOfBefore(
+        accountId: Int,
+        originalTypes: List<TransactionType>,
+        before: LocalDate
+    ): Money = transaction {
+        if (originalTypes.isEmpty()) return@transaction Money.ZERO
+        TransactionPaymentsTable
+            .join(FinancialTransactionsTable, JoinType.INNER,
+                additionalConstraint = {
+                    TransactionPaymentsTable.transactionId eq FinancialTransactionsTable.parentTransactionId
+                })
+            .select(
+                TransactionPaymentsTable.principalAmount,
+                TransactionPaymentsTable.interestAmount,
+                TransactionPaymentsTable.fineAmount,
+                TransactionPaymentsTable.discountAmount
+            )
+            .where {
+                (FinancialTransactionsTable.accountId eq accountId) and
+                (FinancialTransactionsTable.type eq TransactionType.REVERSAL.name) and
+                (FinancialTransactionsTable.status eq TransactionStatus.PAID.name) and
+                (FinancialTransactionsTable.isActive eq true) and
+                (FinancialTransactionsTable.reversedType inList originalTypes.map { it.name }) and
+                (FinancialTransactionsTable.paymentDate less before.atStartOfDay()) and
                 TransactionPaymentsTable.reversedById.isNull()
             }
             .fold(BigDecimal.ZERO) { acc, row ->

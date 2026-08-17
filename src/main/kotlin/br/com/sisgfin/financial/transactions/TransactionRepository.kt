@@ -4,6 +4,7 @@ import br.com.sisgfin.core.domain.MutableEntityRepository
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.money.toMoney
 import br.com.sisgfin.financial.payments.TransactionPayment
+import br.com.sisgfin.financial.payments.TransactionPaymentRepository
 import br.com.sisgfin.financial.payments.TransactionPaymentsTable
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -693,29 +694,33 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             .firstOrNull()?.get(sumExpr)?.toMoney() ?: Money.ZERO
     }
 
-    fun openingBalance(initialBalance: Money, accountId: Int, before: LocalDate): Money {
-        val income          = sumPaidBefore(accountId, TransactionType.INCOME, before)
-        val expense         = sumPaidBefore(accountId, TransactionType.EXPENSE, before)
-        val adjustment      = sumPaidBefore(accountId, TransactionType.ADJUSTMENT, before)
-        val transferIn      = sumPaidTransferInBefore(accountId, before)
-        val transferOut     = sumPaidTransferOutBefore(accountId, before)
-        val incomePartial   = sumPartialPaidBefore(accountId, TransactionType.INCOME, before)
-        val expensePartial  = sumPartialPaidBefore(accountId, TransactionType.EXPENSE, before)
-        val reversalCredit  = sumPaidReversalOfBefore(accountId, listOf(TransactionType.EXPENSE), before)
-        val reversalDebit   = sumPaidReversalOfBefore(
+    // M4 Bloco 2: data da baixa, não do título; PARTIAL e PAID unificados via cashEffective
+    fun openingBalance(
+        initialBalance: Money,
+        accountId: Int,
+        before: LocalDate,
+        paymentRepository: TransactionPaymentRepository
+    ): Money {
+        val income         = paymentRepository.sumCashEffectiveByAccountAndTypeBefore(accountId, TransactionType.INCOME, before)
+        val expense        = paymentRepository.sumCashEffectiveByAccountAndTypeBefore(accountId, TransactionType.EXPENSE, before)
+        val adjustment     = paymentRepository.sumCashEffectiveByAccountAndTypeBefore(accountId, TransactionType.ADJUSTMENT, before)
+        val transferIn     = sumPaidTransferInBefore(accountId, before)
+        val transferOut    = sumPaidTransferOutBefore(accountId, before)
+        val reversalCredit = paymentRepository.sumCashEffectiveForReversalOfBefore(
+            accountId, listOf(TransactionType.EXPENSE), before
+        )
+        val reversalDebit  = paymentRepository.sumCashEffectiveForReversalOfBefore(
             accountId, listOf(TransactionType.INCOME, TransactionType.ADJUSTMENT), before
         )
         return br.com.sisgfin.financial.accounts.AccountBalanceFormula.compute(
             initialBalance = initialBalance,
-            income = income,
-            incomePartial = incomePartial,
-            expense = expense,
-            expensePartial = expensePartial,
-            adjustment = adjustment,
-            transferIn = transferIn,
-            transferOut = transferOut,
+            income         = income,
+            expense        = expense,
+            adjustment     = adjustment,
+            transferIn     = transferIn,
+            transferOut    = transferOut,
             reversalCredit = reversalCredit,
-            reversalDebit = reversalDebit
+            reversalDebit  = reversalDebit
         )
     }
 

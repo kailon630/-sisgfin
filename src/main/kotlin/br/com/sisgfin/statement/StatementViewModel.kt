@@ -9,6 +9,7 @@ import br.com.sisgfin.financial.categories.ExpenseCategoryRepository
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.projects.Project
 import br.com.sisgfin.financial.projects.ProjectRepository
+import br.com.sisgfin.financial.payments.TransactionPaymentRepository
 import br.com.sisgfin.financial.transactions.CounterpartyMap
 import br.com.sisgfin.financial.transactions.CounterpartyResolver
 import br.com.sisgfin.financial.transactions.TransactionRepository
@@ -45,7 +46,8 @@ class StatementViewModel(
     private val costCenterRepository: CostCenterRepository,
     private val categoryRepository: ExpenseCategoryRepository,
     private val counterpartyResolver: CounterpartyResolver,
-    private val projectRepository: ProjectRepository? = null
+    private val projectRepository: ProjectRepository? = null,
+    private val paymentRepository: TransactionPaymentRepository
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -99,7 +101,7 @@ class StatementViewModel(
             runCatching {
                 withContext(Dispatchers.IO) {
                     val opening = if (filter.from != null) {
-                        transactionRepository.openingBalance(account.initialBalance, accountId, filter.from)
+                        transactionRepository.openingBalance(account.initialBalance, accountId, filter.from, paymentRepository)
                     } else {
                         account.initialBalance
                     }

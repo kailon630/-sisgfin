@@ -5,6 +5,7 @@ import br.com.sisgfin.api.ErrorResponse
 import br.com.sisgfin.api.StatementEntryDto
 import br.com.sisgfin.api.StatementResponse
 import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.payments.TransactionPaymentRepository
 import br.com.sisgfin.financial.transactions.TransactionRepository
 import br.com.sisgfin.financial.transactions.TransactionType
 import io.ktor.http.*
@@ -15,7 +16,8 @@ import java.time.format.DateTimeFormatter
 
 fun Route.statementRoutes(
     transactionRepository: TransactionRepository,
-    accountRepository: FinancialAccountRepository
+    accountRepository: FinancialAccountRepository,
+    paymentRepository: TransactionPaymentRepository
 ) {
     get("/accounts/{id}/statement") {
         val id = call.parameters["id"]?.toIntOrNull()
@@ -28,7 +30,7 @@ fun Route.statementRoutes(
         val to = call.request.queryParameters["to"]?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
             ?: LocalDate.now()
 
-        val opening  = transactionRepository.openingBalance(account.initialBalance, id, from)
+        val opening  = transactionRepository.openingBalance(account.initialBalance, id, from, paymentRepository)
         val entries  = transactionRepository.findStatementEntries(accountId = id, from = from, to = to)
         val dtFmt    = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 

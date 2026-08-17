@@ -5,6 +5,7 @@ import br.com.sisgfin.api.routes.*
 import br.com.sisgfin.cashflow.CashFlowService
 import br.com.sisgfin.CostCenterService
 import br.com.sisgfin.financial.categories.ExpenseCategoryService
+import br.com.sisgfin.financial.payments.TransactionPaymentRepository
 import br.com.sisgfin.financial.transactions.TransactionRepository
 import br.com.sisgfin.financial.transactions.TransactionService
 import com.auth0.jwt.JWT
@@ -36,6 +37,7 @@ fun createKtorServer(
     cashFlowService: CashFlowService,
     transactionRepository: TransactionRepository,
     accountRepository: FinancialAccountRepository,
+    paymentRepository: TransactionPaymentRepository,
     userRepository: UserRepository,
     sessionManager: SessionManager
 ): EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration> =
@@ -104,7 +106,7 @@ fun createKtorServer(
                     supplierRoutes(supplierService, sessionManager, userRepository)
                     referenceRoutes(categoryService, costCenterService)
                     cashFlowRoutes(cashFlowService)
-                    statementRoutes(transactionRepository, accountRepository)
+                    statementRoutes(transactionRepository, accountRepository, paymentRepository)
                 }
             }
         }

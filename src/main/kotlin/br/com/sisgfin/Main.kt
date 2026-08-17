@@ -194,6 +194,7 @@ private fun launchBackgroundEngines() {
                 cashFlowService       = getKoin().get<CashFlowService>(),
                 transactionRepository = getKoin().get<TransactionRepository>(),
                 accountRepository     = getKoin().get(),
+                paymentRepository     = getKoin().get(),
                 userRepository        = getKoin().get(),
                 sessionManager        = getKoin().get()
             ).start(wait = false)
