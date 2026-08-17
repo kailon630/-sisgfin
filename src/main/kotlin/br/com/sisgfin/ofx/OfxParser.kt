@@ -1,5 +1,6 @@
 package br.com.sisgfin.ofx
 
+import br.com.sisgfin.core.validation.TextSanitizer
 import br.com.sisgfin.financial.money.Money
 import java.io.File
 import java.math.BigDecimal
@@ -76,7 +77,7 @@ class OfxParser {
                                 date     = date,
                                 amount   = Money(amt),
                                 checkNum = checkNum?.ifBlank { null },
-                                memo     = memo?.trim() ?: ""
+                                memo     = TextSanitizer.clean(memo) ?: ""
                             )
                         }
                         inTrn = false
@@ -88,7 +89,7 @@ class OfxParser {
                     line.startsWith("<TRNTYPE>")  -> trnType  = parseType(tagValue(line))
                     line.startsWith("<DTPOSTED>") -> dtPosted = parseDate(tagValue(line))
                     line.startsWith("<TRNAMT>")   -> rawAmt   = tagValue(line).toBigDecimalOrNull()
-                    line.startsWith("<FITID>")    -> fitId    = tagValue(line)
+                    line.startsWith("<FITID>")    -> fitId    = TextSanitizer.clean(tagValue(line))
                     line.startsWith("<CHECKNUM>") -> checkNum = tagValue(line)
                     line.startsWith("<MEMO>")     -> memo     = tagValue(line)
                 }

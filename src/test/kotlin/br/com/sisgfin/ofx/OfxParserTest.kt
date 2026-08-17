@@ -334,4 +334,53 @@ NEWFILEUID:NONE
         val trn = parser.parse(content).transactions.first()
         assertNull(trn.checkNum)
     }
+
+    // ── T-21: sanitizacao de MEMO e FITID ────────────────────────────────────
+
+    @Test
+    fun `OFX-SAN-01 MEMO com CRLF e lido corretamente`() {
+        // Arquivo OFX com line endings CRLF: trim() remove o \r residual por linha
+        val trns = "   <STMTTRN>\r\n   <TRNTYPE>DEBIT\r\n   <DTPOSTED>20260115\r\n" +
+                   "   <TRNAMT>-150.00\r\n   <FITID>FID001\r\n" +
+                   "   <MEMO>PIX PAGAMENTO\r\n   </STMTTRN>"
+        val content = parser.parse(ofxDocument(trns))
+        assertEquals("PIX PAGAMENTO", content.transactions.first().memo)
+    }
+
+    @Test
+    fun `OFX-SAN-02 MEMO com NBSP e substituido por espaco`() {
+        // NBSP (U+00A0) aparece em OFX Windows-1252; nao e line separator, TextSanitizer converte
+        val memo = "PIX\u00A0PAGAMENTO"
+        val trns = "   <STMTTRN>\n   <TRNTYPE>DEBIT\n   <DTPOSTED>20260115\n" +
+                   "   <TRNAMT>-150.00\n   <FITID>FID002\n" +
+                   "   <MEMO>$memo\n   </STMTTRN>"
+        val content = parser.parse(ofxDocument(trns))
+        assertEquals("PIX PAGAMENTO", content.transactions.first().memo)
+    }
+
+    @Test
+    fun `OFX-SAN-03 FITID limpo e dedup continua funcionando`() {
+        // Dois FITIDs identicos: parser inclui os dois (dedup e responsabilidade do service)
+        val trns = "   <STMTTRN>\n   <TRNTYPE>DEBIT\n   <DTPOSTED>20260115\n" +
+                   "   <TRNAMT>-150.00\n   <FITID>FID_CLEAN\n   <MEMO>MEMO A\n   </STMTTRN>\n" +
+                   "   <STMTTRN>\n   <TRNTYPE>DEBIT\n   <DTPOSTED>20260116\n" +
+                   "   <TRNAMT>-200.00\n   <FITID>FID_CLEAN\n   <MEMO>MEMO B\n   </STMTTRN>"
+        val content = parser.parse(ofxDocument(trns))
+        assertEquals(2, content.transactions.size)
+        assertTrue(content.transactions.all { it.fitId == "FID_CLEAN" })
+    }
+
+    @Test
+    fun `OFX-SAN-04 MEMO limpo e idempotente`() {
+        val content = parser.parse(ofxDocument("""
+   <STMTTRN>
+   <TRNTYPE>DEP
+   <DTPOSTED>20260120
+   <TRNAMT>500.00
+   <FITID>FID_CLEAN2
+   <MEMO>TRANSFERENCIA PIX RECEBIDA
+   </STMTTRN>
+"""))
+        assertEquals("TRANSFERENCIA PIX RECEBIDA", content.transactions.first().memo)
+    }
 }
