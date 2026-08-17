@@ -460,9 +460,16 @@ _Mova os cards aqui quando começar._
 - Origem: `R7_ORCAMENTO_E_OPERACAO.md` (achados R7.1, R7.2)
 - **Decisão registrada:** o R7 continha apenas diagnóstico; adotada a leitura de que o estorno anula a execução orçamentária (realizado volta a zero). Rubricas de exercícios com estorno mudam de valor retroativamente.
 
+#### Bloco Consistência entre telas (R5.5, R5.6) — commits `0c1d7e7` / `939473d`
+
+- [x] **R5.5** — `TransactionContextMenu` em Movimentações não passava `canPay`; usava default `= true`; OPERADOR via "Quitar" e levava `SecurityException`. Corrigido: `TransactionsScreen` passa `canPay = viewModel.canConfirmPayment()`; default removido — todos os chamadores decidem explicitamente. Chamadores: 2 (`TransactionsScreen:244`, `PayablesScreen:190`).
+- [x] **R5.6** — `ReceivablesViewModel` usava `supplierRepository.findAll()` direto; recebível vinculado a funcionário (`employeeId`) aparecia como "Sem cliente". Corrigido: injetar `CounterpartyResolver`; `groupBy { counterparties.nameFor(it) ?: "Sem cliente" }` resolve supplier **e** employee em um único round-trip. `canConfirmPayment()` não implementado: `ReceivablesScreen` não tem nenhuma ação de quitação — tela read-only.
+
+**Decisão registrada (ago/2026):** as três telas (Movimentações, Contas a Pagar, Recebíveis) permanecem separadas — sobreposição de dados entre Movimentações e Contas a Pagar é intencional. O painel de detalhes (`TransactionDetailsPanel`) é compartilhado: `PayablesScreen:48` passa `transactionsViewModel` (não `PayablesViewModel`), o que evita duplicação das correções M5-B, T-08 e T-06 (parcial). Contas a Pagar é tela de operação (tiles de prazo, escopo fixo em EXPENSE em aberto); Movimentações é consulta e lançamento; Recebíveis é espelho de INCOME com aging por cliente.
+
 #### Suíte de testes
 
-- [x] Evolução: 131 → 187 → 191 → 200 → 208 → 213 → 231 → 248 → 291 → 294 → 321 → 344 → 351 → **367** testes — confirmado em `./gradlew test` (BUILD SUCCESSFUL)
+- [x] Evolução: 131 → 187 → 191 → 200 → 208 → 213 → 231 → 248 → 291 → 294 → 321 → 344 → 351 → 367 → 382 → **386** testes — confirmado em `./gradlew test` (BUILD SUCCESSFUL)
 
 ---
 
@@ -539,7 +546,19 @@ _Mova os cards aqui quando começar._
 - [ ] **R7.6** — retorno das engines descartado; sem log nem tela de geração
 - [ ] **R7.4** — inativar funcionário deixa PENDING futuros pagáveis (`EmployeeService.toggleActive` sem cascata)
 - [ ] **S-01** — `parent_transaction_id` codifica quatro relações (parcela, estorno, duplicata, perna de transferência) sem discriminador
-- [ ] **S-02** — `OverdueEngine` roda como efeito colateral de `listAll()`; telas que não o disparam veem status defasado
+- [ ] **S-02** — `syncOverdueStatuses()` é escrita no banco disparada por leitura, sem coordenação entre instâncias.
+  **Três pontos de disparo (independentes, sem lock):**
+  - `TransactionService.listAll():45` — chamado por `TransactionsViewModel.load()`
+  - `PayablesViewModel.load():81` — chamada direta antes de `listByQuery(aPagar())`
+  - `ReceivablesViewModel.load():58` — chamada direta antes de `findReceivables()`
+
+  A operação é idempotente (UPDATE WHERE status=PENDING AND dueDate < hoje), mas é concorrente: em desktop multi-instância + API 8080, três processos podem executar o mesmo UPDATE simultaneamente sem coordenação.
+
+  **Telas sem disparo de sync (podem exibir status defasado):** Dashboard (`DashboardViewModel`), Fluxo de Caixa (`CashFlowViewModel`), Orçamento (`BudgetViewModel`), Relatórios (`ReportsViewModel`).
+
+  **Duas alternativas — requer decisão:**
+  1. **Job agendado único** — `OverdueEngine` rodando em intervalo fixo (ex: 1 min) dentro do processo principal; `listAll()` deixa de chamar sync. Vantagem: único ponto de escrita, sem efeito colateral de leitura. Risco: API e segunda instância não participam.
+  2. **OVERDUE derivado** — remover status OVERDUE como valor persistido; calcular em tempo real (`dueDate < hoje AND status = PENDING → OVERDUE`). Muda comportamento em filtros, relatórios, Dashboard e OverdueEngine inteiro. Decisão com maior blast radius.
 - [ ] **S-04** — `generateInstallments()` chama `repository.insert()` direto, contornando `validateForSave`
 - [ ] **S-05** — soft delete altera saldo sem transição de estado nem evento
 - [ ] **S-06** — índices compostos para as agregações; sem índice em `payment_date`, usado pelo saldo de abertura
