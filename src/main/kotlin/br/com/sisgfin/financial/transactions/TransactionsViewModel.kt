@@ -17,6 +17,8 @@ import br.com.sisgfin.core.result.Result
 import br.com.sisgfin.financial.categories.ExpenseCategory
 import br.com.sisgfin.financial.categories.ExpenseCategoryRepository
 import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.payments.TransactionPayment
+import br.com.sisgfin.financial.payments.TransactionPaymentRepository
 import br.com.sisgfin.financial.transactions.timeline.TransactionTimelineEvent
 import br.com.sisgfin.financial.transactions.workflow.TransactionStateMachine
 import br.com.sisgfin.contracts.Contract
@@ -51,7 +53,8 @@ class TransactionsViewModel(
     private val contractService: ContractService? = null,
     private val projectRepository: ProjectRepository? = null,
     private val counterpartyResolver: CounterpartyResolver,
-    private val employeeRepository: EmployeeRepository? = null
+    private val employeeRepository: EmployeeRepository? = null,
+    private val paymentRepository: TransactionPaymentRepository
 ) : BaseCrudViewModel<Transaction>(
     operations = service,
     emptyFactory = {
@@ -112,6 +115,9 @@ class TransactionsViewModel(
     // RN-25/26: saldo de rubrica consultado em tempo real pelo formulário
     private val _budgetBalance = MutableStateFlow<BudgetBalance?>(null)
     val budgetBalance: StateFlow<BudgetBalance?> = _budgetBalance.asStateFlow()
+
+    private val _baixas = MutableStateFlow<List<TransactionPayment>>(emptyList())
+    val baixas: StateFlow<List<TransactionPayment>> = _baixas.asStateFlow()
 
     init {
         // Sincroniza o serviço com o filtro padrão antes que BaseCrudViewModel execute o primeiro load()
@@ -239,7 +245,13 @@ class TransactionsViewModel(
 
     fun selectTransaction(item: Transaction?) {
         select(item)
-        item?.let { loadTimeline(it.id) } ?: run { _timeline.value = emptyList() }
+        if (item != null) {
+            loadTimeline(item.id)
+            loadBaixas(item.id)
+        } else {
+            _timeline.value = emptyList()
+            _baixas.value = emptyList()
+        }
     }
 
     private val _pendingDeepLink = MutableStateFlow<Transaction?>(null)
@@ -253,6 +265,14 @@ class TransactionsViewModel(
             _timeline.value = withContext(Dispatchers.IO) { service.getTimeline(transactionId) }
         }
     }
+
+    fun loadBaixas(transactionId: Int) {
+        viewModelScope.launch {
+            _baixas.value = withContext(Dispatchers.IO) { paymentRepository.findByTransaction(transactionId) }
+        }
+    }
+
+    fun canConfirmPayment(): Boolean = service.canConfirmPayment()
 
     fun applyQuickFilter(filter: TransactionListFilter) {
         _listFilter.value = filter
@@ -340,6 +360,10 @@ class TransactionsViewModel(
         runOperation { service.reverseTransaction(id, justification) }
     }
 
+    fun reversePayment(paymentId: Int, justification: String) {
+        runOperation { service.reversePayment(paymentId, justification) }
+    }
+
     // RN-12: ações filtradas pelo perfil do usuário
     fun getAvailableActions(status: TransactionStatus, type: TransactionType): Set<TransactionAction> {
         val canConfirm = service.canConfirmPayment()
@@ -413,7 +437,10 @@ class TransactionsViewModel(
             when (result) {
                 is Result.Success -> {
                     load()
-                    uiState.value.selectedItem?.id?.let { loadTimeline(it) }
+                    uiState.value.selectedItem?.id?.let {
+                        loadTimeline(it)
+                        loadBaixas(it)
+                    }
                 }
                 is Result.Error -> _operationError.value = result.error.userMessage
                 is Result.Validation -> _operationError.value = result.errorOrNull()?.userMessage

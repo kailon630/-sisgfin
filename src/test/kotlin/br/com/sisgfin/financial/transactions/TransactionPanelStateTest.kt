@@ -7,6 +7,7 @@ import br.com.sisgfin.SupplierRepository
 import br.com.sisgfin.budget.BudgetItemRepository
 import br.com.sisgfin.financial.categories.ExpenseCategoryRepository
 import br.com.sisgfin.financial.money.Money
+import br.com.sisgfin.financial.payments.TransactionPaymentRepository
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -40,6 +41,7 @@ class TransactionPanelStateTest {
     private lateinit var sessionManager: SessionManager
     private lateinit var budgetRepo: BudgetItemRepository
     private lateinit var counterpartyResolver: CounterpartyResolver
+    private lateinit var paymentRepo: TransactionPaymentRepository
 
     @BeforeEach
     fun setUp() {
@@ -51,6 +53,7 @@ class TransactionPanelStateTest {
         sessionManager       = mockk()
         budgetRepo           = mockk()
         counterpartyResolver = mockk()
+        paymentRepo          = mockk(relaxed = true)
 
         every { service.listAll()                    } returns emptyList()
         every { service.applyListFilter(any())       } just Runs
@@ -76,7 +79,8 @@ class TransactionPanelStateTest {
         categoryRepository   = categoryRepo,
         sessionManager       = sessionManager,
         budgetRepository     = budgetRepo,
-        counterpartyResolver = counterpartyResolver
+        counterpartyResolver = counterpartyResolver,
+        paymentRepository    = paymentRepo
     )
 
     @Test

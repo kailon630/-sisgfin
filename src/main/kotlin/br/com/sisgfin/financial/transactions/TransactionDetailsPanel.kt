@@ -25,8 +25,10 @@ import br.com.sisgfin.financial.money.MoneyFormatter
 import br.com.sisgfin.financial.money.centsToMoney
 import br.com.sisgfin.financial.money.toCentsStr
 import br.com.sisgfin.financial.money.toMoney
+import br.com.sisgfin.financial.payments.TransactionPayment
 import br.com.sisgfin.financial.transactions.timeline.TransactionTimelineEvent
 import br.com.sisgfin.financial.transactions.workflow.TransactionStateMachine
+import androidx.compose.ui.text.style.TextDecoration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -49,12 +51,16 @@ fun TransactionDetailsPanel(
     val categories by viewModel.categories.collectAsState()
     val projects by viewModel.projects.collectAsState()
     val timeline by viewModel.timeline.collectAsState()
+    val baixas by viewModel.baixas.collectAsState()
     val operationError by viewModel.operationError.collectAsState()
     val budgetBalance by viewModel.budgetBalance.collectAsState()
     val item = uiState.selectedItem ?: return
 
     var showPaymentDialog by remember { mutableStateOf(false) }
     var showReversalDialog by remember { mutableStateOf(false) }
+    var showBaixaReversalDialog by remember { mutableStateOf(false) }
+    var selectedBaixaId by remember { mutableStateOf(0) }
+    val canConfirm = viewModel.canConfirmPayment()
 
     // Form state — reset when item changes
     var description by remember(item.id) { mutableStateOf(item.description) }
@@ -484,6 +490,18 @@ fun TransactionDetailsPanel(
         }
 
         TimelineSection(timeline)
+
+        if (item.id != 0) {
+            BaixasSection(
+                baixas = baixas,
+                canConfirm = canConfirm,
+                outstandingPrincipal = item.outstandingPrincipal,
+                onEstornar = { paymentId ->
+                    selectedBaixaId = paymentId
+                    showBaixaReversalDialog = true
+                }
+            )
+        }
     }
 
     // Modal: baixa rápida (RN-16)
@@ -510,6 +528,22 @@ fun TransactionDetailsPanel(
                 showReversalDialog = false
             }
         )
+    }
+
+    // Modal: estorno de baixa individual (M5-B)
+    if (showBaixaReversalDialog) {
+        val baixa = baixas.find { it.id == selectedBaixaId }
+        if (baixa != null) {
+            ReversalDialog(
+                transactionDescription = "Baixa de ${MoneyFormatter.format(baixa.principalAmount)} em ${baixa.paymentDate.format(dateFormatter)}",
+                amount = baixa.cashEffective,
+                onDismiss = { showBaixaReversalDialog = false },
+                onConfirm = { justification ->
+                    viewModel.reversePayment(selectedBaixaId, justification)
+                    showBaixaReversalDialog = false
+                }
+            )
+        }
     }
 }
 
@@ -683,6 +717,81 @@ private fun TimelineSection(events: List<TransactionTimelineEvent>) {
                     Text(event.message, style = MaterialTheme.typography.labelMedium, color = WsTextSecondary)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun BaixasSection(
+    baixas: List<TransactionPayment>,
+    canConfirm: Boolean,
+    outstandingPrincipal: Money,
+    onEstornar: (Int) -> Unit
+) {
+    DetailSection("Baixas") {
+        if (baixas.isEmpty()) {
+            Text(
+                "Nenhuma baixa registrada.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = WsTextSecondary
+            )
+        } else {
+            baixas.forEach { baixa ->
+                val ativa = baixa.reversedById == null
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            baixa.paymentDate.format(dateFormatter),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (ativa) WsTextSecondary else WsTextSecondary.copy(alpha = 0.5f),
+                            textDecoration = if (ativa) TextDecoration.None else TextDecoration.LineThrough
+                        )
+                        Text(
+                            MoneyFormatter.format(baixa.principalAmount),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (ativa) LocalContentColor.current else WsTextSecondary,
+                            textDecoration = if (ativa) TextDecoration.None else TextDecoration.LineThrough
+                        )
+                        if (!baixa.interestAmount.isZero()) {
+                            Text(
+                                "+${MoneyFormatter.format(baixa.interestAmount)} juros",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (ativa) WsTextSecondary else WsTextSecondary.copy(alpha = 0.5f)
+                            )
+                        }
+                        if (!baixa.fineAmount.isZero()) {
+                            Text(
+                                "+${MoneyFormatter.format(baixa.fineAmount)} multa",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (ativa) WsTextSecondary else WsTextSecondary.copy(alpha = 0.5f)
+                            )
+                        }
+                        if (!baixa.discountAmount.isZero()) {
+                            Text(
+                                "-${MoneyFormatter.format(baixa.discountAmount)} desconto",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (ativa) WsTextSecondary else WsTextSecondary.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+                    if (ativa && canConfirm) {
+                        WsIconButton(Icons.Default.Undo, onClick = { onEstornar(baixa.id) })
+                    }
+                }
+                HorizontalDivider(color = WsBorder, modifier = Modifier.padding(vertical = 4.dp))
+            }
+            val totalPago = baixas
+                .filter { it.reversedById == null }
+                .fold(Money.ZERO) { acc, b -> acc + b.cashEffective }
+            SummaryRow("Total pago", MoneyFormatter.format(totalPago))
+            SummaryRow("Saldo devedor", MoneyFormatter.format(outstandingPrincipal))
         }
     }
 }
