@@ -126,7 +126,7 @@ class TransactionOriginTest {
         val repo = mockk<TransactionRepository>()
         val sourceSlot = slot<Transaction>()
         val destSlot   = slot<Transaction>()
-        every { repo.insertTransferPair(capture(sourceSlot), capture(destSlot)) } returns (10 to 20)
+        every { repo.insertTransferPairWithBaixas(capture(sourceSlot), capture(destSlot), any(), any(), any()) } returns (10 to 20)
         val service = makeService(repo, accountRepo)
 
         service.createTransfer(1, 2, Money.fromString("500.00"), LocalDateTime.now(), "TED")
