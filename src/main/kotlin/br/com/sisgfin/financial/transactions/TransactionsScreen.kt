@@ -243,6 +243,7 @@ fun TransactionsScreen(
         TransactionContextMenu(
             expanded = contextMenuExpanded,
             transaction = contextMenuTx,
+            canPay = viewModel.canConfirmPayment(),
             onDismiss = { contextMenuExpanded = false },
             onEdit = {
                 contextMenuTx?.let { viewModel.openDialog(it) }
@@ -479,7 +480,7 @@ internal fun TransactionContextMenu(
     onCancel: () -> Unit,
     onDuplicate: () -> Unit,
     onDetails: () -> Unit,
-    canPay: Boolean = true
+    canPay: Boolean
 ) {
     if (!expanded || transaction == null) return
     DropdownMenu(expanded = true, onDismissRequest = onDismiss, containerColor = WsElevated) {

@@ -125,6 +125,16 @@ class BaixasViewModelTest {
         assertEquals(false, vm.canConfirmPayment())
     }
 
+    // ── R5-01 ────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `R5-01 canConfirmPayment true quando service retorna true`() {
+        every { service.canConfirmPayment() } returns true
+        val vm = buildVm()
+
+        assertEquals(true, vm.canConfirmPayment())
+    }
+
     // ── B1-04 ────────────────────────────────────────────────────────────────
 
     @Test
