@@ -717,6 +717,84 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             .map { rowToTransaction(it) }
     }
 
+    // M4b: uma linha por baixa; a consulta por período usa payment_date da baixa, não do título.
+    fun findPaymentEntries(
+        accountId: Int? = null,
+        from: LocalDate? = null,
+        to: LocalDate? = null,
+        type: TransactionType? = null,
+        costCenterId: Int? = null,
+        categoryId: Int? = null,
+        projectId: Int? = null
+    ): List<br.com.sisgfin.financial.payments.PaymentEntry> = transaction {
+
+        // Query 1: baixas do período com o título associado
+        val filteredRows = TransactionPaymentsTable
+            .join(FinancialTransactionsTable, JoinType.INNER,
+                onColumn = TransactionPaymentsTable.transactionId,
+                otherColumn = FinancialTransactionsTable.id)
+            .selectAll()
+            .where {
+                var cond: org.jetbrains.exposed.sql.Op<Boolean> =
+                    (FinancialTransactionsTable.isActive eq true) and
+                    TransactionPaymentsTable.reversedById.isNull()
+                accountId?.let { a -> cond = cond and (TransactionPaymentsTable.accountId eq a) }
+                from?.let { f -> cond = cond and (TransactionPaymentsTable.paymentDate greaterEq f) }
+                to?.let { t -> cond = cond and (TransactionPaymentsTable.paymentDate less t.plusDays(1)) }
+                type?.let { tp -> cond = cond and (FinancialTransactionsTable.type eq tp.name) }
+                costCenterId?.let { cc -> cond = cond and (FinancialTransactionsTable.costCenterId eq cc) }
+                categoryId?.let { cid -> cond = cond and (FinancialTransactionsTable.categoryId eq cid) }
+                projectId?.let { pid -> cond = cond and (FinancialTransactionsTable.projectId eq pid) }
+                cond
+            }
+            .orderBy(
+                TransactionPaymentsTable.paymentDate to SortOrder.ASC,
+                TransactionPaymentsTable.id to SortOrder.ASC
+            )
+            .map { row ->
+                val tx = rowToTransaction(row)
+                val payment = br.com.sisgfin.financial.payments.TransactionPayment(
+                    id              = row[TransactionPaymentsTable.id],
+                    transactionId   = row[TransactionPaymentsTable.transactionId],
+                    paymentDate     = row[TransactionPaymentsTable.paymentDate],
+                    accountId       = row[TransactionPaymentsTable.accountId],
+                    principalAmount = row[TransactionPaymentsTable.principalAmount].toMoney(),
+                    interestAmount  = row[TransactionPaymentsTable.interestAmount].toMoney(),
+                    fineAmount      = row[TransactionPaymentsTable.fineAmount].toMoney(),
+                    discountAmount  = row[TransactionPaymentsTable.discountAmount].toMoney(),
+                    reversedById    = row[TransactionPaymentsTable.reversedById],
+                    idempotencyKey  = row[TransactionPaymentsTable.idempotencyKey],
+                    notes           = row[TransactionPaymentsTable.notes],
+                    createdBy       = row[TransactionPaymentsTable.createdBy],
+                    createdAt       = row[TransactionPaymentsTable.createdAt]
+                )
+                payment to tx
+            }
+
+        if (filteredRows.isEmpty()) return@transaction emptyList()
+
+        // Query 2: todos os IDs de baixas ativas por título (para ordinal e total globais)
+        val txIds = filteredRows.map { (p, _) -> p.transactionId }.distinct()
+        val allIdsByTx: Map<Int, List<Int>> = TransactionPaymentsTable
+            .select(TransactionPaymentsTable.id, TransactionPaymentsTable.transactionId)
+            .where {
+                (TransactionPaymentsTable.transactionId inList txIds) and
+                TransactionPaymentsTable.reversedById.isNull()
+            }
+            .orderBy(
+                TransactionPaymentsTable.paymentDate to SortOrder.ASC,
+                TransactionPaymentsTable.id to SortOrder.ASC
+            )
+            .groupBy({ it[TransactionPaymentsTable.transactionId] }, { it[TransactionPaymentsTable.id] })
+
+        filteredRows.map { (payment, tx) ->
+            val ids     = allIdsByTx[payment.transactionId] ?: listOf(payment.id)
+            val ordinal = ids.indexOf(payment.id) + 1
+            val total   = if (tx.status == TransactionStatus.PAID) ids.size else null
+            br.com.sisgfin.financial.payments.PaymentEntry(payment, tx, ordinal, total)
+        }
+    }
+
     fun sumRealizedByProject(projectId: Int): br.com.sisgfin.financial.money.Money = transaction {
         val sumExpr = FinancialTransactionsTable.paidAmount.sum()
         val result = FinancialTransactionsTable.select(sumExpr)
