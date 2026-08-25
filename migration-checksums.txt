@@ -1,0 +1,46 @@
+# Checksums de migrações Flyway aplicadas ao banco de dados.
+# Formato: <arquivo> <checksum_flyway_crc32>
+#
+# REGRA: arquivos listados aqui estão congelados (aplicados ao banco compartilhado).
+# Nunca edite um arquivo Vnn já listado — crie uma nova migration para correções.
+# Atualizar este arquivo na mesma PR que adicionar a nova migration ao DB compartilhado.
+#
+# Gerado com algoritmo CRC32 linewise (compatível com Flyway 9.x):
+#   for line in file: crc32.update(line.rstrip('\r\n').encode('utf-8'))
+#
+V1__init.sql 168763402
+V2__employees.sql 1544619056
+V3__user_management_and_audit.sql 180535899
+V4__base_financial_registrations.sql -359407213
+V5__money_precision.sql 1633485574
+V6__transaction_engine_foundation.sql 658642162
+V7__transaction_workflow.sql 33298044
+V8__transaction_installment_and_document.sql 1014322712
+V9__expense_categories.sql -652299435
+V10__seed_expense_categories.sql 1341606986
+V11__supplier_document_unique.sql -1794062443
+V12__rename_user_role_operador.sql -941831150
+V13__investment_account.sql 1405133446
+V14__budget_items.sql 1777732374
+V15__employee_payment_days.sql -1803469221
+V16__transaction_ofx_fitid.sql -1971989572
+V17__ofx_imports.sql 319202197
+V18__transaction_reconciled_with.sql 461304061
+V19__recurrence_templates.sql 1882502658
+V20__transaction_recurrence_fk.sql 1915533302
+V21__contracts.sql -1733731058
+V22__transaction_contract_fk.sql -1515143909
+V23__supplier_entity_type.sql -1221557431
+V24__employee_supplier_fk.sql 23193792
+V25__employee_banking_fields.sql -286482468
+V26__drop_employee_supplier_fk.sql -1378135078
+V27__transaction_charges.sql -1656223030
+V28__financial_projects.sql 1738454701
+V29__transaction_reversed_type.sql -910439317
+V30__transaction_origin.sql -840639645
+V31__employees_document_unique_employment_type_name.sql -2040834267
+V32__reclassify_transaction_origin.sql 1426875705
+V33__transaction_payments.sql 491656518
+V34__transaction_version.sql -996457549
+V35__sanitize_text_fields.sql 1178904626
+V36__sanitize_transaction_text_fields.sql -58103689

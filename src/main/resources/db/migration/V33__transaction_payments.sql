@@ -1,7 +1,7 @@
 -- M1: tabela de baixas individuais — entidade de baixa do SPEC_TRANSACTION_PAYMENTS.md
 -- idempotency_key adicionado ao DDL do SPEC (não estava no original).
 
-CREATE TABLE transaction_payments (
+CREATE TABLE IF NOT EXISTS transaction_payments (
     id                  SERIAL PRIMARY KEY,
     transaction_id      INTEGER NOT NULL REFERENCES financial_transactions(id),
     payment_date        DATE NOT NULL,
@@ -17,9 +17,17 @@ CREATE TABLE transaction_payments (
     created_at          TIMESTAMP NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_tp_transaction ON transaction_payments(transaction_id);
-CREATE INDEX idx_tp_date_account ON transaction_payments(payment_date, account_id);
-CREATE UNIQUE INDEX idx_tp_idempotency ON transaction_payments(idempotency_key) WHERE idempotency_key IS NOT NULL;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_tp_transaction') THEN
+        EXECUTE 'CREATE INDEX idx_tp_transaction ON transaction_payments(transaction_id)';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_tp_date_account') THEN
+        EXECUTE 'CREATE INDEX idx_tp_date_account ON transaction_payments(payment_date, account_id)';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_tp_idempotency') THEN
+        EXECUTE 'CREATE UNIQUE INDEX idx_tp_idempotency ON transaction_payments(idempotency_key) WHERE idempotency_key IS NOT NULL';
+    END IF;
+END $$;
 
 -- Backfill: fonte primária = timeline (um evento por baixa, data e valor individuais).
 -- Nota: timeline.amount armazena cashThisBaixa (principal + juros + multa juntos);
@@ -46,11 +54,17 @@ JOIN transaction_events te
     AND te.amount > 0
 WHERE t.is_active = true
     AND t.paid_amount IS NOT NULL
-    AND t.paid_amount > 0;
+    AND t.paid_amount > 0
+    AND NOT EXISTS (
+        SELECT 1 FROM transaction_payments tp2
+        WHERE tp2.transaction_id = t.id
+          AND tp2.notes LIKE 'Backfill M1 — origem: timeline%'
+    );
 
 -- Backfill: fonte secundária = campo colapsado (para títulos sem eventos de pagamento).
 -- Aplica-se quando o operador nunca usou o fluxo de baixa pelo sistema (dados legados).
 -- Esses registros têm data aproximada (payment_date do título = última baixa registrada).
+-- paid_amount é principal puro nestes dados históricos; interest_amount/fine_amount são separados.
 -- Lista de IDs afetados deve constar no relatório de migração.
 INSERT INTO transaction_payments
     (transaction_id, payment_date, account_id, principal_amount, interest_amount, fine_amount, discount_amount, notes, created_by, created_at)
@@ -58,7 +72,7 @@ SELECT
     t.id,
     COALESCE(t.payment_date, t.updated_at)::date,
     t.account_id,
-    t.paid_amount - COALESCE(t.interest_amount, 0) - COALESCE(t.fine_amount, 0),
+    t.paid_amount,
     COALESCE(t.interest_amount, 0),
     COALESCE(t.fine_amount, 0),
     0,
@@ -69,10 +83,14 @@ FROM financial_transactions t
 WHERE t.is_active = true
     AND t.paid_amount IS NOT NULL
     AND t.paid_amount > 0
-    AND (t.paid_amount - COALESCE(t.interest_amount, 0) - COALESCE(t.fine_amount, 0)) > 0
     AND NOT EXISTS (
         SELECT 1
         FROM transaction_events te
         WHERE te.transaction_id = t.id
             AND te.event_type IN ('PAYMENT', 'PARTIAL_PAYMENT')
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM transaction_payments tp2
+        WHERE tp2.transaction_id = t.id
+          AND tp2.notes LIKE 'Backfill M1 — origem: campo colapsado%'
     );

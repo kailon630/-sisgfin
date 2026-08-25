@@ -77,6 +77,26 @@ tasks.test {
     useJUnitPlatform()
 }
 
+// Instala scripts/check-migrations.sh como pre-commit hook.
+// Executado automaticamente no build; seguro de rodar múltiplas vezes (idempotente).
+// Em Windows (sem bash) a tarefa é ignorada silenciosamente.
+tasks.register("installGitHooks") {
+    group = "build setup"
+    description = "Instala scripts/check-migrations.sh como .git/hooks/pre-commit"
+    doLast {
+        val hooksDir = rootProject.file(".git/hooks")
+        val script   = rootProject.file("scripts/check-migrations.sh")
+        if (!hooksDir.exists() || !script.exists()) return@doLast
+        val hook = hooksDir.resolve("pre-commit")
+        hook.writeText("#!/usr/bin/env bash\nexec \"${script.canonicalPath}\"\n")
+        hook.setExecutable(true)
+    }
+}
+
+tasks.named("build") {
+    dependsOn("installGitHooks")
+}
+
 compose.desktop {
     application {
         mainClass = "br.com.sisgfin.MainKt"
