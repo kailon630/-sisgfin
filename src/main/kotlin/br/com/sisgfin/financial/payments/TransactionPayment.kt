@@ -9,6 +9,12 @@ data class TransactionPayment(
     val transactionId: Int,
     val paymentDate: LocalDate,
     val accountId: Int,
+    /**
+     * Valor de face amortizado nesta baixa — NÃO o dinheiro desembolsado.
+     * Exemplo: título 1.000 quitado com 50 de desconto → principalAmount = 1.000, discountAmount = 50.
+     * Caixa efetivo = principalAmount + interestAmount + fineAmount − discountAmount = 950.
+     * Decisão D-PRINCIPAL (docs/DECISOES.md) — provisória, pendente de confirmação contábil.
+     */
     val principalAmount: Money,
     val interestAmount: Money = Money.ZERO,
     val fineAmount: Money = Money.ZERO,

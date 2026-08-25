@@ -112,4 +112,80 @@ class BudgetRealizedReversalBehaviorTest {
         val realized = sumRealized(emptyList())
         assertEquals("0.00", realized.toString())
     }
+
+    // ── 3b: realizado orçamentário = principal líquido de desconto ────────────
+    // Juros e multa NÃO consomem dotação — são despesas financeiras distintas.
+    // cashEffective é para saldo de caixa; realizado usa principalAmount - discountAmount.
+
+    /**
+     * Espelha a lógica de BudgetItemRepository.sumRealized pós D-PRINCIPAL (B):
+     * Σ(principalAmount) das baixas EXPENSE ativas.
+     * principalAmount = face amortizado (já inclui desconto). Juros e multa ignorados.
+     */
+    private data class Payment(
+        val principal: Money,
+        val interest: Money = Money.ZERO,
+        val fine: Money = Money.ZERO,
+        val discount: Money = Money.ZERO
+    )
+
+    private fun sumRealizedFromPayments(payments: List<Payment>): Money =
+        payments.fold(Money.ZERO) { acc, p -> acc + p.principal }
+
+    @Test
+    fun `dotacao 10000 titulo 1000 pago com 50 juros realizado e 1000 saldo e 9000`() {
+        val budgetAmount = Money.fromString("10000.00")
+        val payments = listOf(
+            Payment(principal = Money.fromString("1000.00"), interest = Money.fromString("50.00"))
+        )
+        val realized = sumRealizedFromPayments(payments)
+        val budgetBalance = budgetAmount - realized
+
+        assertEquals(0, Money.fromString("1000.00").compareTo(realized),
+            "Realizado = 1000 (principal puro; juros 50 não consomem dotação)")
+        assertEquals(0, Money.fromString("9000.00").compareTo(budgetBalance),
+            "Saldo da dotação = 9000 (10000 - 1000)")
+    }
+
+    @Test
+    fun `titulo 1000 com desconto 50 operador paga 950 face 1000 realizado e 1000`() {
+        // D-PRINCIPAL (B): principal_amount = face = 1000 (cash 950 + desconto 50).
+        // Realizado = Σ(principal_amount) = 1000. Desconto já está no face — sem dupla subtração.
+        val payments = listOf(
+            Payment(principal = Money.fromString("1000.00"), discount = Money.fromString("50.00"))
+        )
+        val realized = sumRealizedFromPayments(payments)
+        assertEquals(0, Money.fromString("1000.00").compareTo(realized),
+            "Face amortizado = 1000; desconto embutido no face, não subtrai separado")
+    }
+
+    @Test
+    fun `titulo 1000 pago com 50 juros e 30 multa realizado e 1000 encargos ignorados`() {
+        val payments = listOf(
+            Payment(
+                principal = Money.fromString("1000.00"),
+                interest  = Money.fromString("50.00"),
+                fine      = Money.fromString("30.00")
+            )
+        )
+        val realized = sumRealizedFromPayments(payments)
+        assertEquals(0, Money.fromString("1000.00").compareTo(realized),
+            "Juros (50) e multa (30) ignorados: realizado = 1000")
+    }
+
+    @Test
+    fun `titulo 1000 com juros 50 e desconto 100 operador paga 900 face 1000 realizado e 1000`() {
+        // D-PRINCIPAL (B): face = cash + desconto = 900 + 100 = 1000. Juros ignorados.
+        // Realizado = Σ(principal_amount) = 1000.
+        val payments = listOf(
+            Payment(
+                principal = Money.fromString("1000.00"),
+                interest  = Money.fromString("50.00"),
+                discount  = Money.fromString("100.00")
+            )
+        )
+        val realized = sumRealizedFromPayments(payments)
+        assertEquals(0, Money.fromString("1000.00").compareTo(realized),
+            "Face amortizado = 1000; desconto embutido no face; juros ignorados")
+    }
 }

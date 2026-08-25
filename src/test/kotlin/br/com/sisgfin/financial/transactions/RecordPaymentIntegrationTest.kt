@@ -235,7 +235,7 @@ class RecordPaymentIntegrationTest {
     // ── encargos (comportamento de armazenamento) ─────────────────────────────
 
     @Test
-    fun `recordPayment com juros - paidAmount armazena principal mais juros e interestAmount isolado`() {
+    fun `recordPayment com juros - paidAmount armazena principal puro e interestAmount isolado`() {
         val repo = mockk<TransactionRepository>()
         every { repo.findById(1) } returns expense()
         val slot = slot<Transaction>()
@@ -246,13 +246,14 @@ class RecordPaymentIntegrationTest {
             interestAmount = Money.fromString("50.00"))
 
         val updated = slot.captured
-        assertEquals(0, Money.fromString("1050.00").compareTo(updated.paidAmount!!))
+        // paidAmount = principal puro (1000); juros ficam em interestAmount
+        assertEquals(0, Money.fromString("1000.00").compareTo(updated.paidAmount!!))
         assertEquals(0, Money.fromString("50.00").compareTo(updated.interestAmount!!))
         assertEquals(0, Money.fromString("1000.00").compareTo(updated.amount))
     }
 
     @Test
-    fun `recordPayment com multa - paidAmount armazena principal mais multa e fineAmount isolado`() {
+    fun `recordPayment com multa - paidAmount armazena principal puro e fineAmount isolado`() {
         val repo = mockk<TransactionRepository>()
         every { repo.findById(1) } returns expense()
         val slot = slot<Transaction>()
@@ -263,12 +264,13 @@ class RecordPaymentIntegrationTest {
             fineAmount = Money.fromString("30.00"))
 
         val updated = slot.captured
-        assertEquals(0, Money.fromString("1030.00").compareTo(updated.paidAmount!!))
+        // paidAmount = principal puro (1000); multa fica em fineAmount
+        assertEquals(0, Money.fromString("1000.00").compareTo(updated.paidAmount!!))
         assertEquals(0, Money.fromString("30.00").compareTo(updated.fineAmount!!))
     }
 
     @Test
-    fun `recordPayment com juros e multa - paidAmount acumula os tres componentes`() {
+    fun `recordPayment com juros e multa - paidAmount armazena principal puro mesmo com encargos`() {
         val repo = mockk<TransactionRepository>()
         every { repo.findById(1) } returns expense()
         val slot = slot<Transaction>()
@@ -280,8 +282,8 @@ class RecordPaymentIntegrationTest {
             fineAmount     = Money.fromString("20.00"))
 
         val updated = slot.captured
-        // paidAmount = 1000 + 50 + 20 = 1070
-        assertEquals(0, Money.fromString("1070.00").compareTo(updated.paidAmount!!))
+        // paidAmount = principal puro (1000); juros e multa em colunas separadas
+        assertEquals(0, Money.fromString("1000.00").compareTo(updated.paidAmount!!))
         assertEquals(0, Money.fromString("50.00").compareTo(updated.interestAmount!!))
         assertEquals(0, Money.fromString("20.00").compareTo(updated.fineAmount!!))
     }
@@ -289,11 +291,10 @@ class RecordPaymentIntegrationTest {
     // ── CARACTERIZAÇÃO — comportamentos incorretos conhecidos ─────────────────
 
     @Test
-    fun `P0-5 recordPayment com juros grava paidAmount correto e amount permanece face value`() {
-        // P0-5 (corrigido no M4): amount=1000 é o face value e não muda — correto.
-        // paidAmount=1050 é o caixa efetivo (principal + juros) — correto.
-        // calculateBalance agora usa cashEffective das baixas (M4), portanto
-        // R$50 de juros SÃO visíveis no saldo. Nenhum valor errado neste teste.
+    fun `P0-5 recordPayment com juros grava paidAmount principal puro e amount permanece face value`() {
+        // paidAmount = principal puro (1000); juros em interestAmount (50).
+        // cashEffective da baixa = 1050 — registrado na tabela transaction_payments.
+        // calculateBalance usa cashEffective das baixas (M4), visível no saldo.
         val repo = mockk<TransactionRepository>()
         every { repo.findById(1) } returns expense()
         val slot = slot<Transaction>()
@@ -304,24 +305,21 @@ class RecordPaymentIntegrationTest {
             interestAmount = Money.fromString("50.00"))
 
         val updated = slot.captured
-        // paidAmount = principal + juros = 1050 (caixa efetivo, fonte das baixas)
-        assertEquals(0, Money.fromString("1050.00").compareTo(updated.paidAmount!!))
-        // amount permanece o face value do título (1000) — imutável por design
+        // paidAmount = principal puro (1000)
+        assertEquals(0, Money.fromString("1000.00").compareTo(updated.paidAmount!!))
+        // amount permanece o face value do título — imutável por design
         assertEquals(0, Money.fromString("1000.00").compareTo(updated.amount))
     }
 
     @Test
-    fun `P0-5 ao quitar PARTIAL paidAmount acumula corretamente e amount permanece face value`() {
-        // P0-5 (corrigido no M4): a assimetria PARTIAL→PAID foi eliminada.
-        // calculateBalance usa cashEffective das baixas, não amount nem paidAmount do título.
-        // Cada baixa contribui com seu cashEffective — a transição de status não afeta o saldo.
-        //
-        // Estado pós-1ª baixa: 300 principal + 50 juros → PARTIAL
-        //   paidAmount = 350, interestAmount = 50, amount = 1000 (face value)
+    fun `P0-5 ao quitar PARTIAL paidAmount acumula principal e amount permanece face value`() {
+        // Estado pós-1ª baixa (300 principal + 50 juros → PARTIAL):
+        //   paidAmount = 300 (principal puro), interestAmount = 50, amount = 1000 (face value)
+        //   outstandingPrincipal = 1000 - 300 = 700
         val repo = mockk<TransactionRepository>()
         every { repo.findById(1) } returns expense(
             status         = TransactionStatus.PARTIAL,
-            paidAmount     = "350.00",
+            paidAmount     = "300.00",
             interestAmount = "50.00"
         )
         val slot = slot<Transaction>()
@@ -333,8 +331,8 @@ class RecordPaymentIntegrationTest {
 
         val updated = slot.captured
         assertEquals(TransactionStatus.PAID, updated.status)
-        // paidAmount acumulado: 350 (1ª baixa) + 700 (2ª baixa) = 1050
-        assertEquals(0, Money.fromString("1050.00").compareTo(updated.paidAmount!!))
+        // paidAmount acumulado: 300 (1ª baixa) + 700 (2ª baixa) = 1000 (principal puro)
+        assertEquals(0, Money.fromString("1000.00").compareTo(updated.paidAmount!!))
         // amount permanece o face value do título — imutável por design
         assertEquals(0, Money.fromString("1000.00").compareTo(updated.amount))
     }

@@ -106,8 +106,9 @@ class BudgetItemRepository : MutableEntityRepository<BudgetItem> {
     }
 
     // Balancete: realizado no mês específico (para filtro mensal).
-    // M4 D3(b): cashEffective das baixas; desconto reduz realizado; filtra por p.payment_date.
-    // C-11: soma EXPENSE; subtrai estornos de EXPENSE via cashEffective do original.
+    // D-PRINCIPAL (B): principal_amount é face amortizado — realizado = Σ(principal_amount).
+    // Juros/multa não consomem dotação. Desconto já está embutido no face (sem subtração extra).
+    // C-11: soma EXPENSE; subtrai estornos de EXPENSE via baixas do título original.
     fun sumRealizedMonth(costCenterId: Int, categoryId: Int, year: Int, month: Int): Money = transaction {
         val from = java.time.LocalDate.of(year, month, 1)
         val to   = from.plusMonths(1)
@@ -116,12 +117,7 @@ class BudgetItemRepository : MutableEntityRepository<BudgetItem> {
             .join(FinancialTransactionsTable, JoinType.INNER,
                 onColumn = TransactionPaymentsTable.transactionId,
                 otherColumn = FinancialTransactionsTable.id)
-            .select(
-                TransactionPaymentsTable.principalAmount,
-                TransactionPaymentsTable.interestAmount,
-                TransactionPaymentsTable.fineAmount,
-                TransactionPaymentsTable.discountAmount
-            )
+            .select(TransactionPaymentsTable.principalAmount)
             .where {
                 (FinancialTransactionsTable.costCenterId eq costCenterId) and
                 (FinancialTransactionsTable.categoryId   eq categoryId) and
@@ -132,10 +128,7 @@ class BudgetItemRepository : MutableEntityRepository<BudgetItem> {
                 (TransactionPaymentsTable.paymentDate less to)
             }
             .fold(BigDecimal.ZERO) { acc, row ->
-                acc + row[TransactionPaymentsTable.principalAmount] +
-                      row[TransactionPaymentsTable.interestAmount] +
-                      row[TransactionPaymentsTable.fineAmount] -
-                      row[TransactionPaymentsTable.discountAmount]
+                acc + row[TransactionPaymentsTable.principalAmount]
             }.toMoney()
 
         val reversals = TransactionPaymentsTable
@@ -143,12 +136,7 @@ class BudgetItemRepository : MutableEntityRepository<BudgetItem> {
                 additionalConstraint = {
                     TransactionPaymentsTable.transactionId eq FinancialTransactionsTable.parentTransactionId
                 })
-            .select(
-                TransactionPaymentsTable.principalAmount,
-                TransactionPaymentsTable.interestAmount,
-                TransactionPaymentsTable.fineAmount,
-                TransactionPaymentsTable.discountAmount
-            )
+            .select(TransactionPaymentsTable.principalAmount)
             .where {
                 (FinancialTransactionsTable.costCenterId eq costCenterId) and
                 (FinancialTransactionsTable.categoryId   eq categoryId) and
@@ -161,29 +149,22 @@ class BudgetItemRepository : MutableEntityRepository<BudgetItem> {
                 TransactionPaymentsTable.reversedById.isNull()
             }
             .fold(BigDecimal.ZERO) { acc, row ->
-                acc + row[TransactionPaymentsTable.principalAmount] +
-                      row[TransactionPaymentsTable.interestAmount] +
-                      row[TransactionPaymentsTable.fineAmount] -
-                      row[TransactionPaymentsTable.discountAmount]
+                acc + row[TransactionPaymentsTable.principalAmount]
             }.toMoney()
 
         expenses - reversals
     }
 
     // RN-24: realizado no ano por CC × categoria.
-    // M4 D3(b): cashEffective das baixas; desconto reduz realizado.
-    // C-11: soma EXPENSE; subtrai estornos de EXPENSE via cashEffective do original.
+    // D-PRINCIPAL (B): principal_amount é face amortizado — realizado = Σ(principal_amount).
+    // Juros/multa não consomem dotação. Desconto já está embutido no face (sem subtração extra).
+    // C-11: soma EXPENSE; subtrai estornos de EXPENSE via baixas do título original.
     fun sumRealized(costCenterId: Int, categoryId: Int, year: Int): Money = transaction {
         val expenses = TransactionPaymentsTable
             .join(FinancialTransactionsTable, JoinType.INNER,
                 onColumn = TransactionPaymentsTable.transactionId,
                 otherColumn = FinancialTransactionsTable.id)
-            .select(
-                TransactionPaymentsTable.principalAmount,
-                TransactionPaymentsTable.interestAmount,
-                TransactionPaymentsTable.fineAmount,
-                TransactionPaymentsTable.discountAmount
-            )
+            .select(TransactionPaymentsTable.principalAmount)
             .where {
                 (FinancialTransactionsTable.costCenterId eq costCenterId) and
                 (FinancialTransactionsTable.categoryId   eq categoryId) and
@@ -193,10 +174,7 @@ class BudgetItemRepository : MutableEntityRepository<BudgetItem> {
                 (TransactionPaymentsTable.paymentDate.year() eq year)
             }
             .fold(BigDecimal.ZERO) { acc, row ->
-                acc + row[TransactionPaymentsTable.principalAmount] +
-                      row[TransactionPaymentsTable.interestAmount] +
-                      row[TransactionPaymentsTable.fineAmount] -
-                      row[TransactionPaymentsTable.discountAmount]
+                acc + row[TransactionPaymentsTable.principalAmount]
             }.toMoney()
 
         val reversals = TransactionPaymentsTable
@@ -204,12 +182,7 @@ class BudgetItemRepository : MutableEntityRepository<BudgetItem> {
                 additionalConstraint = {
                     TransactionPaymentsTable.transactionId eq FinancialTransactionsTable.parentTransactionId
                 })
-            .select(
-                TransactionPaymentsTable.principalAmount,
-                TransactionPaymentsTable.interestAmount,
-                TransactionPaymentsTable.fineAmount,
-                TransactionPaymentsTable.discountAmount
-            )
+            .select(TransactionPaymentsTable.principalAmount)
             .where {
                 (FinancialTransactionsTable.costCenterId eq costCenterId) and
                 (FinancialTransactionsTable.categoryId   eq categoryId) and
@@ -221,10 +194,7 @@ class BudgetItemRepository : MutableEntityRepository<BudgetItem> {
                 TransactionPaymentsTable.reversedById.isNull()
             }
             .fold(BigDecimal.ZERO) { acc, row ->
-                acc + row[TransactionPaymentsTable.principalAmount] +
-                      row[TransactionPaymentsTable.interestAmount] +
-                      row[TransactionPaymentsTable.fineAmount] -
-                      row[TransactionPaymentsTable.discountAmount]
+                acc + row[TransactionPaymentsTable.principalAmount]
             }.toMoney()
 
         expenses - reversals

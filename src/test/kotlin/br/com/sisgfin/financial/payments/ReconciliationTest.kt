@@ -80,10 +80,13 @@ class ReconciliationTest {
     fun `ciclo parcial com juros mais quitacao produz zero divergencias`() {
         val inserted = mutableListOf<TransactionPayment>()
 
+        // paidAmount é principal puro; interestAmount/fineAmount são colunas separadas.
+        // Estado após baixa 1 (300 principal + 50 juros): paidAmount=300, interest=50, outstanding=700.
+        // Estado após baixa 2 (400 principal):             paidAmount=700, interest=50, outstanding=300.
         val states = listOf(
             expense(status = TransactionStatus.PENDING),
-            expense(status = TransactionStatus.PARTIAL, paidAmount = "350.00", interestAmount = "50.00"),
-            expense(status = TransactionStatus.PARTIAL, paidAmount = "750.00", interestAmount = "50.00")
+            expense(status = TransactionStatus.PARTIAL, paidAmount = "300.00", interestAmount = "50.00"),
+            expense(status = TransactionStatus.PARTIAL, paidAmount = "700.00", interestAmount = "50.00")
         )
         val service = buildService(states, inserted)
 
@@ -91,15 +94,17 @@ class ReconciliationTest {
         service.recordPayment(1, date, Money.fromString("300.00"), interestAmount = Money.fromString("50.00"))
         // Baixa 2: 400 principal
         service.recordPayment(1, date.plusDays(1), Money.fromString("400.00"))
-        // Baixa 3: 300 principal
+        // Baixa 3: 300 principal (quita o saldo restante)
         service.recordPayment(1, date.plusDays(2), Money.fromString("300.00"))
 
-        // paidAmount acumulado no título = 350 + 400 + 300 = 1050
-        val paidAmount = Money.fromString("1050.00")
-
-        val somaBaixas = inserted.fold(Money.ZERO) { acc, p -> acc + p.cashEffective }
-        assertEquals(0, paidAmount.compareTo(somaBaixas),
-            "Σ(cashEffective=$somaBaixas) deve igualar paidAmount=$paidAmount — zero divergências")
+        // Invariante: Σ(cashEffective) == paidAmount_principal + interestAmount + fineAmount
+        // cashEffective = (300+50) + 400 + 300 = 1050
+        // paidAmount (principal puro) = 300+400+300 = 1000; interestAmount = 50; fineAmount = 0
+        val somaCashEffective = inserted.fold(Money.ZERO) { acc, p -> acc + p.cashEffective }
+        val somaEncargos      = Money.fromString("50.00") // interestAmount final no título
+        val principalAcumulado = Money.fromString("1000.00")
+        assertEquals(0, (principalAcumulado + somaEncargos).compareTo(somaCashEffective),
+            "Σ(cashEffective=$somaCashEffective) deve igualar principal($principalAcumulado) + encargos($somaEncargos)")
     }
 
     // ── baixa integral única ──────────────────────────────────────────────────

@@ -48,13 +48,11 @@ data class Transaction(
     val version: Int = 0
 ) : Identifiable, Activatable {
 
-    /** Principal efetivamente amortizado — exclui juros e multa acumulados. */
+    /** Principal amortizado. `paidAmount` é principal puro — encargos são colunas à parte. */
     val principalPaid: Money
-        get() = (paidAmount ?: Money.ZERO) -
-                (interestAmount ?: Money.ZERO) -
-                (fineAmount ?: Money.ZERO)
+        get() = paidAmount ?: Money.ZERO
 
-    /** Quanto ainda falta amortizar do valor do título. */
+    /** Saldo devedor do título. */
     val outstandingPrincipal: Money
         get() = amount - principalPaid
 }

@@ -416,12 +416,13 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
             }
             .toList()
 
-        val newPrincipal  = activeBaixas.fold(BigDecimal.ZERO) { acc, r -> acc + r[TransactionPaymentsTable.principalAmount] }
-        val newInterest   = activeBaixas.fold(BigDecimal.ZERO) { acc, r -> acc + r[TransactionPaymentsTable.interestAmount] }
-        val newFine       = activeBaixas.fold(BigDecimal.ZERO) { acc, r -> acc + r[TransactionPaymentsTable.fineAmount] }
-        val totalDiscount = activeBaixas.fold(BigDecimal.ZERO) { acc, r -> acc + r[TransactionPaymentsTable.discountAmount] }
-        val newPaidAmount    = newPrincipal + newInterest + newFine
-        val principalQuitado = newPrincipal + totalDiscount
+        val newPrincipal = activeBaixas.fold(BigDecimal.ZERO) { acc, r -> acc + r[TransactionPaymentsTable.principalAmount] }
+        val newInterest  = activeBaixas.fold(BigDecimal.ZERO) { acc, r -> acc + r[TransactionPaymentsTable.interestAmount] }
+        val newFine      = activeBaixas.fold(BigDecimal.ZERO) { acc, r -> acc + r[TransactionPaymentsTable.fineAmount] }
+        // D-PRINCIPAL (B): principalAmount é face amortizado (inclui desconto).
+        // paid_amount = soma de faces; quitação direta sem somar desconto à parte.
+        val newPaidAmount    = newPrincipal
+        val principalQuitado = newPrincipal
 
         val newStatus = when {
             principalQuitado.compareTo(title.amount.value) >= 0 -> TransactionStatus.PAID
@@ -806,16 +807,25 @@ class TransactionRepository : MutableEntityRepository<Transaction> {
         }
     }
 
+    // Realizado orçamentário por projeto = Σ(principal_amount) das baixas ativas de EXPENSE.
+    // Fonte: transaction_payments (alinhado com sumRealized/sumRealizedMonth de BudgetItemRepository).
+    // Estorno de baixa individual (reversed_by_id) e de título (REVERSAL) são excluídos pelo
+    // filtro reversed_by_id IS NULL — nenhum netting manual necessário.
     fun sumRealizedByProject(projectId: Int): br.com.sisgfin.financial.money.Money = transaction {
-        val sumExpr = FinancialTransactionsTable.paidAmount.sum()
-        val result = FinancialTransactionsTable.select(sumExpr)
+        val sumExpr = TransactionPaymentsTable.principalAmount.sum()
+        TransactionPaymentsTable
+            .join(FinancialTransactionsTable, JoinType.INNER,
+                onColumn    = TransactionPaymentsTable.transactionId,
+                otherColumn = FinancialTransactionsTable.id)
+            .select(sumExpr)
             .where {
                 (FinancialTransactionsTable.projectId eq projectId) and
-                (FinancialTransactionsTable.status eq TransactionStatus.PAID.name) and
-                (FinancialTransactionsTable.isActive eq true)
+                (FinancialTransactionsTable.type     eq TransactionType.EXPENSE.name) and
+                (FinancialTransactionsTable.isActive eq true) and
+                TransactionPaymentsTable.reversedById.isNull()
             }
-            .firstOrNull()?.get(sumExpr)
-        result?.toMoney() ?: br.com.sisgfin.financial.money.Money.ZERO
+            .firstOrNull()?.get(sumExpr)?.toMoney()
+            ?: br.com.sisgfin.financial.money.Money.ZERO
     }
 
     // Extrato: saldo antes de uma data (para saldo de abertura do período)

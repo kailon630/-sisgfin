@@ -64,19 +64,19 @@ class SaldoDevedorTest {
     // ── B2-03 ────────────────────────────────────────────────────────────────
 
     @Test
-    fun `B2-03 encargos no paidAmount nao alteram o saldo devedor do principal`() {
-        // paidAmount = 350 (300 principal + 50 juros), interestAmount = 50
-        // principalPaid = 350 - 50 = 300 → outstanding = 1000 - 300 = 700
+    fun `B2-03 encargos nao alteram o saldo devedor do principal`() {
+        // paidAmount = 300 (principal puro), interestAmount = 50 (separado)
+        // principalPaid = paidAmount = 300 → outstanding = 1000 - 300 = 700
         val t = tx(
             "1000.00",
-            paidAmount     = "350.00",
+            paidAmount     = "300.00",
             interestAmount = "50.00",
             status = TransactionStatus.PARTIAL
         )
         assertEquals(
             Money.fromString("700.00"),
             t.outstandingPrincipal,
-            "Encargos não devem reduzir o saldo devedor do principal"
+            "Encargos em coluna separada não alteram o saldo devedor do principal"
         )
     }
 }

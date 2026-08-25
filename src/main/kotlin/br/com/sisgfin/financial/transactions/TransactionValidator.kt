@@ -88,6 +88,7 @@ object TransactionValidator {
     fun validatePayment(
         outstanding: Money,
         principal: Money,
+        discount: Money = Money.ZERO,
         interest: Money?,
         fine: Money?,
         paymentDate: java.time.LocalDateTime,
@@ -96,7 +97,8 @@ object TransactionValidator {
         if (principal.isZero() || principal.isNegative()) {
             throw IllegalArgumentException("Valor pago deve ser maior que zero.")
         }
-        if (principal.compareTo(outstanding) > 0) {
+        // D-PRINCIPAL (B): face = principal (cash) + desconto; face não pode exceder saldo.
+        if ((principal + discount).compareTo(outstanding) > 0) {
             throw IllegalArgumentException(
                 "Valor excede o saldo devedor do título (R$ $outstanding restantes)."
             )

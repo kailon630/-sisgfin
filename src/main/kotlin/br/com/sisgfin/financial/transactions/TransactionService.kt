@@ -459,29 +459,28 @@ class TransactionService(
         val juros = interestAmount ?: Money.ZERO
         val multa = fineAmount ?: Money.ZERO
 
+        // D-PRINCIPAL (B): principal_amount = face amortizado = cash + desconto.
+        // Ex: título 1.000 pago com 950 + 50 desconto → principalThisBaixa = 1.000.
+        // cashThisBaixa = 950 (fluxo real de caixa, sem desconto).
+        val principalThisBaixa = paidAmount + discountAmount
+
         TransactionValidator.validatePayment(
             outstanding = existing.outstandingPrincipal,
             principal   = paidAmount,
+            discount    = discountAmount,
             interest    = interestAmount,
             fine        = fineAmount,
             paymentDate = paymentDate,
             issueDate   = existing.issueDate
         )
 
-        // Acumula sobre o que já existe — paidAmount armazena (principal + juros + multa) cumulativos.
-        // discountAmount NÃO entra em paidAmount (dual-write mantém semântica atual para leituras).
-        val newPaidAmount     = (existing.paidAmount     ?: Money.ZERO) + paidAmount + juros + multa
+        // paid_amount acumula face amortizado — outstandingPrincipal = amount - paid_amount.
+        val newPaidAmount     = (existing.paidAmount     ?: Money.ZERO) + principalThisBaixa
         val newInterestAmount = (existing.interestAmount ?: Money.ZERO) + juros
         val newFineAmount     = (existing.fineAmount     ?: Money.ZERO) + multa
-        val newPrincipalPaid  = newPaidAmount - newInterestAmount - newFineAmount
 
-        // D3(a): desconto conta para quitação — verifica saldo histórico de desconto se houver
-        val totalDiscount = if (!discountAmount.isZero()) {
-            paymentRepository.sumDiscountByTransaction(id) + discountAmount
-        } else {
-            discountAmount
-        }
-        val principalQuitado = newPrincipalPaid + totalDiscount
+        // D3(a): face já inclui desconto — quitação direta, sem somar desconto histórico.
+        val principalQuitado = newPaidAmount
 
         val newStatus = TransactionStateMachine.resolveStatusAfterPayment(
             existing.amount.value,
@@ -489,8 +488,8 @@ class TransactionService(
         )
         TransactionStateMachine.assertTransition(existing.status, newStatus)
 
-        val cashThisBaixa = paidAmount + juros + multa
-        val newOutstanding  = existing.outstandingPrincipal - paidAmount
+        val cashThisBaixa  = paidAmount + juros + multa
+        val newOutstanding = existing.outstandingPrincipal - principalThisBaixa
 
         val updated = existing.copy(
             status         = newStatus,
@@ -508,7 +507,7 @@ class TransactionService(
             transactionId   = id,
             paymentDate     = paymentDate.toLocalDate(),
             accountId       = existing.accountId,
-            principalAmount = paidAmount,
+            principalAmount = principalThisBaixa,
             interestAmount  = juros,
             fineAmount      = multa,
             discountAmount  = discountAmount,

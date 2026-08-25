@@ -22,7 +22,8 @@ import kotlin.test.assertTrue
  * - Delega ao repository.updateWithPayment() quando paymentRepository está presente
  * - Cria TransactionPayment com valores corretos
  * - Continua refletindo paidAmount no título (dual-write)
- * - D3(a): desconto de 50 em título de 1000 (principal 950) → PAID
+ * - D-PRINCIPAL (B): desconto de 50 em título de 1000 (operador paga 950) → PAID,
+ *   paidAmount acumulado = 1000 (face), principalAmount na baixa = 1000 (face).
  * - Idempotência: mesma chamada duas vezes envia mesmo idempotencyKey ao repositório
  * - Duas baixas separadas geram dois chamadas a updateWithPayment
  * - Se updateWithPayment lança, exceção não é engolida (atomicidade)
@@ -117,16 +118,19 @@ class RecordPaymentDualWriteTest {
         assertEquals(TransactionStatus.PAID, updatedSlot.captured.status)
     }
 
-    // ── D3(a): desconto quita o título ────────────────────────────────────────
+    // ── D-PRINCIPAL (B): desconto quita o título; paidAmount = face ──────────
 
     @Test
-    fun `titulo de 1000 pago com 950 principal mais 50 desconto vira PAID`() {
+    fun `titulo de 1000 operador paga 950 com desconto 50 vira PAID paidAmount e 1000 face`() {
+        // D-PRINCIPAL (B): principal_amount = face = cash + desconto = 950 + 50 = 1000.
+        // paidAmount acumulado no título = face = 1000 (outstandingPrincipal = 0).
+        // cashEffective = 950 (o que saiu da conta bancária).
         val repo        = mockk<TransactionRepository>()
-        val paymentRepo = mockk<TransactionPaymentRepository>()
+        val paymentRepo = mockk<TransactionPaymentRepository>(relaxed = true)
         every { repo.findById(1) } returns expense()
         val updatedSlot = slot<Transaction>()
-        every { repo.updateWithPayment(capture(updatedSlot), any()) } returns true
-        every { paymentRepo.sumDiscountByTransaction(1) } returns Money.ZERO
+        val paymentSlot = slot<TransactionPayment>()
+        every { repo.updateWithPayment(capture(updatedSlot), capture(paymentSlot)) } returns true
 
         makeService(repo, paymentRepo).recordPayment(
             id              = 1,
@@ -136,8 +140,12 @@ class RecordPaymentDualWriteTest {
         )
 
         assertEquals(TransactionStatus.PAID, updatedSlot.captured.status)
-        // paidAmount continua sendo só o caixa (sem desconto)
-        assertEquals(0, Money.fromString("950.00").compareTo(updatedSlot.captured.paidAmount!!))
+        // paidAmount = face acumulado = 1000 (não 950)
+        assertEquals(0, Money.fromString("1000.00").compareTo(updatedSlot.captured.paidAmount!!))
+        // principal_amount na baixa = face = 1000
+        assertEquals(0, Money.fromString("1000.00").compareTo(paymentSlot.captured.principalAmount))
+        // discount_amount na baixa = 50
+        assertEquals(0, Money.fromString("50.00").compareTo(paymentSlot.captured.discountAmount))
     }
 
     // ── idempotência: mesma chave enviada ao repositório nas duas chamadas ────

@@ -66,14 +66,13 @@ class PartialPaymentAccumulationTest {
         if (paymentDate.isBefore(tx.issueDate))
             throw IllegalArgumentException("Data de pagamento não pode ser anterior à data de emissão.")
 
-        // Acumulação (espelha lógica corrigida)
-        val newPaidAmount  = (tx.paidAmount      ?: Money.ZERO) + principal + juros + multa
-        val newInterest    = (tx.interestAmount   ?: Money.ZERO) + juros
-        val newFine        = (tx.fineAmount       ?: Money.ZERO) + multa
-        val newPrincipal   = newPaidAmount - newInterest - newFine  // = principalPaid acumulado
+        // paidAmount armazena apenas principal; encargos acumulam em colunas separadas.
+        val newPaidAmount = (tx.paidAmount     ?: Money.ZERO) + principal
+        val newInterest   = (tx.interestAmount ?: Money.ZERO) + juros
+        val newFine       = (tx.fineAmount     ?: Money.ZERO) + multa
 
-        // Resolução de status (espelha TransactionStateMachine corrigido)
-        val newStatus = TransactionStateMachine.resolveStatusAfterPayment(tx.amount.value, newPrincipal.value)
+        // Resolução de status com base no principal acumulado
+        val newStatus = TransactionStateMachine.resolveStatusAfterPayment(tx.amount.value, newPaidAmount.value)
         TransactionStateMachine.assertTransition(tx.status, newStatus)  // exige PARTIAL→PARTIAL permitido
 
         return tx.copy(
@@ -131,7 +130,9 @@ class PartialPaymentAccumulationTest {
     // ── T4 ───────────────────────────────────────────────────────────────────
 
     @Test
-    fun `T4 quitacao com encargos — PAID principalPaid 1000 paidAmount 1050 saldo 1050`() {
+    fun `T4 quitacao com encargos — PAID paidAmount 1000 principal puro interestAmount 50 separado`() {
+        // paidAmount = principal puro; encargos ficam em interestAmount/fineAmount.
+        // Impacto de encargos no saldo de conta tratado na Parte B (calculateBalance).
         val tx0 = pendingTx()
         val tx1 = applyPayment(tx0, Money.fromString("300.00"), paymentDate = payDate1)
 
@@ -143,19 +144,14 @@ class PartialPaymentAccumulationTest {
         )
 
         assertEquals(TransactionStatus.PAID, tx2.status)
-        assertEquals(0, Money.fromString("1050.00").compareTo(tx2.paidAmount!!),
-            "paidAmount deve ser 1050 (principal acumulado + juros)")
+        assertEquals(0, Money.fromString("1000.00").compareTo(tx2.paidAmount!!),
+            "paidAmount deve ser 1000 (principal puro — encargos não embutidos)")
         assertEquals(0, Money.fromString("1000.00").compareTo(tx2.principalPaid),
-            "principalPaid deve ser 1000 (exclui encargos)")
+            "principalPaid == paidAmount quando paidAmount é principal puro")
         assertEquals(0, Money.fromString("50.00").compareTo(tx2.interestAmount!!),
             "interestAmount acumulado deve ser 50")
-
-        // Saldo de conta deve refletir saída de 1050 (não 1000)
-        val balance = AccountBalanceFormula.compute(
-            initialBalance = Money.fromString("10000.00"),
-            expense        = tx2.paidAmount!!
-        )
-        assertEquals(0, Money.fromString("8950.00").compareTo(balance))
+        assertEquals(0, Money.ZERO.compareTo(tx2.outstandingPrincipal),
+            "título quitado: outstandingPrincipal == 0")
     }
 
     // ── T5 ───────────────────────────────────────────────────────────────────
@@ -200,7 +196,7 @@ class PartialPaymentAccumulationTest {
         // paidAmount deve ser 500 acumulados
         assertEquals(0, Money.fromString("500.00").compareTo(tx2.paidAmount!!))
 
-        // AccountBalanceFormula com paidAmount (total caixa saído) como expensePartial
+        // Sem encargos: paidAmount == cashEffective; AccountBalanceFormula produz resultado consistente.
         val balance = AccountBalanceFormula.compute(
             initialBalance = Money.fromString("10000.00"),
             expensePartial = tx2.paidAmount!!
