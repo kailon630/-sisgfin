@@ -44,3 +44,6 @@ V33__transaction_payments.sql 491656518
 V34__transaction_version.sql -996457549
 V35__sanitize_text_fields.sql 1178904626
 V36__sanitize_transaction_text_fields.sql -58103689
+V37__transfer_reversal_link.sql -79512802
+V38__payroll_recurrence_idempotency_constraints.sql -1155902595
+V39__engine_runs.sql 998533475
