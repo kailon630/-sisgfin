@@ -28,7 +28,9 @@ import br.com.sisgfin.financial.money.toMoney
 import br.com.sisgfin.employees.EmployeeViewModel
 import br.com.sisgfin.core.ui.notifications.CrudEventEffects
 import br.com.sisgfin.core.ui.panel.BaseCrudPanel
+import br.com.sisgfin.engine.EngineRunStatus
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.*
 
@@ -40,12 +42,17 @@ fun EmployeesScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val nextPaymentDates by viewModel.nextPaymentDates.collectAsState()
+    val payrollRun by viewModel.payrollRun.collectAsState()
+    val payrollRunning by viewModel.payrollRunning.collectAsState()
     CrudEventEffects(viewModel)
+
+    val monthFmt = DateTimeFormatter.ofPattern("MMMM/yyyy", java.util.Locale("pt", "BR"))
+    val mesAtual = YearMonth.now().format(monthFmt).replaceFirstChar { it.uppercase() }
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         // Toolbar da Tela
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -59,20 +66,30 @@ fun EmployeesScreen(
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
-            
+
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 WsButton(
                     text = "Novo Funcionário",
                     icon = Icons.Default.Add,
-                    onClick = { 
+                    onClick = {
                         viewModel.openEmployeeDialog()
                         onShowRightPanel { EmployeeEditorPanel(viewModel, onCloseRightPanel) }
                     }
                 )
-                
+
                 WsIconButton(Icons.Default.Refresh, onClick = { viewModel.loadEmployees() })
             }
         }
+
+        // Banner de status da folha do mês
+        PayrollStatusBanner(
+            monthLabel   = mesAtual,
+            run          = payrollRun,
+            isRunning    = payrollRunning,
+            onRunNow     = { viewModel.runPayrollNow() }
+        )
+
+        Spacer(Modifier.height(12.dp))
 
         // Tabela Moderna
         Box(
@@ -555,4 +572,59 @@ fun EmployeePopup(employee: Employee?, onSave: (Employee) -> Unit, onCancel: () 
             WsButton("Descartar", variant = WsButtonVariant.TERTIARY, onClick = onCancel)
         }
     )
+}
+
+@Composable
+private fun PayrollStatusBanner(
+    monthLabel: String,
+    run: br.com.sisgfin.engine.EngineRun?,
+    isRunning: Boolean,
+    onRunNow: () -> Unit
+) {
+    val timeFmt = DateTimeFormatter.ofPattern("dd/MM HH:mm")
+
+    val (borderColor, label) = when {
+        isRunning -> WsWarning to "Gerando folha de $monthLabel…"
+        run == null -> WsDanger to "Folha de $monthLabel não foi gerada neste mês"
+        run.status == EngineRunStatus.SUCCESS ->
+            WsSuccess to "Folha de $monthLabel: gerada em ${run.finishedAt?.format(timeFmt)} — ${run.created} criado(s), ${run.skipped} já existia(m)"
+        run.status == EngineRunStatus.PARTIAL_FAILURE ->
+            WsWarning to "Folha de $monthLabel: geração parcial em ${run.finishedAt?.format(timeFmt)} — ${run.created} criado(s), ${run.failed} falha(s): ${run.error}"
+        run.status == EngineRunStatus.FAILED ->
+            WsDanger to "Folha de $monthLabel: falha em ${run.finishedAt?.format(timeFmt)} — ${run.error}"
+        run.status == EngineRunStatus.SKIPPED_LOCKED ->
+            WsWarning to "Folha de $monthLabel: geração em andamento em outra instância"
+        else -> WsWarning to "Folha de $monthLabel: status desconhecido"
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, borderColor, RoundedCornerShape(6.dp))
+            .background(borderColor.copy(alpha = 0.06f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = borderColor,
+            modifier = Modifier.weight(1f)
+        )
+        if (!isRunning) {
+            Spacer(Modifier.width(12.dp))
+            WsButton(
+                text = "Gerar folha do mês",
+                variant = WsButtonVariant.SECONDARY,
+                onClick = onRunNow
+            )
+        } else {
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp,
+                color = WsWarning
+            )
+        }
+    }
 }

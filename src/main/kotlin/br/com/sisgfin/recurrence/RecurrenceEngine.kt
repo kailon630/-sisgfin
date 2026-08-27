@@ -1,5 +1,7 @@
 package br.com.sisgfin.recurrence
 
+import br.com.sisgfin.core.errors.AppLogger
+import br.com.sisgfin.core.errors.ErrorClassifier
 import br.com.sisgfin.financial.transactions.Transaction
 import br.com.sisgfin.financial.transactions.TransactionRepository
 import br.com.sisgfin.financial.transactions.TransactionService
@@ -12,7 +14,9 @@ data class RecurrenceGenerationResult(
     val templateId: Int,
     val description: String,
     val generated: Int,
-    val skipped: Int
+    val skipped: Int,
+    val failed: Int = 0,
+    val failureReason: String? = null
 )
 
 class RecurrenceEngine(
@@ -26,7 +30,12 @@ class RecurrenceEngine(
         val today   = LocalDate.now()
         val horizon = today.plusMonths(monthsAhead.toLong())
         return templateRepository.findAllActive().map { template ->
-            generateForTemplate(template, today, horizon)
+            runCatching {
+                generateForTemplate(template, today, horizon)
+            }.getOrElse { e ->
+                AppLogger.error(ErrorClassifier.classify(e))
+                RecurrenceGenerationResult(template.id, template.description, 0, 0, failed = 1, failureReason = e.message ?: "Erro desconhecido")
+            }
         }
     }
 

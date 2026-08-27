@@ -8,6 +8,8 @@ import br.com.sisgfin.financial.transactions.TransactionRepository
 import br.com.sisgfin.financial.transactions.TransactionService
 import br.com.sisgfin.financial.transactions.TransactionStatus
 import br.com.sisgfin.financial.transactions.TransactionType
+import br.com.sisgfin.core.errors.AppLogger
+import br.com.sisgfin.core.errors.ErrorClassifier
 import java.time.LocalDateTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -19,7 +21,9 @@ private val competenciaFmt = DateTimeFormatter.ofPattern("MM/yyyy")
 data class PayrollGenerationResult(
     val generated: Int,
     val skipped: Int,
-    val employeeName: String
+    val employeeName: String,
+    val failed: Int = 0,
+    val failureReason: String? = null
 )
 
 class PayrollEngine(
@@ -38,34 +42,39 @@ class PayrollEngine(
         return employeeRepository.getAllActive()
             .filter { it.effectivePaymentDays().isNotEmpty() }
             .map { employee ->
-                var generated = 0
-                var skipped   = 0
-                for (day in employee.effectivePaymentDays()) {
-                    val dueDate = yearMonth.atDay(day.coerceAtMost(yearMonth.lengthOfMonth()))
-                    if (transactionRepository.existsPaymentForEmployee(employee.id, dueDate)) {
-                        skipped++
-                        continue
-                    }
-                    val monthLabel  = yearMonth.format(monthFmt).replaceFirstChar { it.uppercase() }
-                    val competencia = yearMonth.format(competenciaFmt)
-                    transactionService.create(
-                        Transaction(
-                            type           = TransactionType.EXPENSE,
-                            status         = TransactionStatus.PENDING,
-                            description    = "Pagamento ${employee.name} — $monthLabel",
-                            amount         = employee.salary,
-                            issueDate      = LocalDateTime.now(),
-                            dueDate        = dueDate.atStartOfDay(),
-                            accountId      = defaultAccountId,
-                            employeeId     = employee.id,
-                            origin         = TransactionOrigin.PAYROLL_ENGINE,
-                            documentType   = "FOLHA",
-                            documentNumber = competencia
+                runCatching {
+                    var generated = 0
+                    var skipped   = 0
+                    for (day in employee.effectivePaymentDays()) {
+                        val dueDate = yearMonth.atDay(day.coerceAtMost(yearMonth.lengthOfMonth()))
+                        if (transactionRepository.existsPaymentForEmployee(employee.id, dueDate)) {
+                            skipped++
+                            continue
+                        }
+                        val monthLabel  = yearMonth.format(monthFmt).replaceFirstChar { it.uppercase() }
+                        val competencia = yearMonth.format(competenciaFmt)
+                        transactionService.create(
+                            Transaction(
+                                type           = TransactionType.EXPENSE,
+                                status         = TransactionStatus.PENDING,
+                                description    = "Pagamento ${employee.name} — $monthLabel",
+                                amount         = employee.salary,
+                                issueDate      = LocalDateTime.now(),
+                                dueDate        = dueDate.atStartOfDay(),
+                                accountId      = defaultAccountId,
+                                employeeId     = employee.id,
+                                origin         = TransactionOrigin.PAYROLL_ENGINE,
+                                documentType   = "FOLHA",
+                                documentNumber = competencia
+                            )
                         )
-                    )
-                    generated++
+                        generated++
+                    }
+                    PayrollGenerationResult(generated, skipped, employee.name)
+                }.getOrElse { e ->
+                    AppLogger.error(ErrorClassifier.classify(e))
+                    PayrollGenerationResult(0, 0, employee.name, failed = 1, failureReason = e.message ?: "Erro desconhecido")
                 }
-                PayrollGenerationResult(generated, skipped, employee.name)
             }
     }
 
