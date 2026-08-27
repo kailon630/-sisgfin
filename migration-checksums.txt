@@ -37,8 +37,8 @@ V26__drop_employee_supplier_fk.sql -1378135078
 V27__transaction_charges.sql -1656223030
 V28__financial_projects.sql 1738454701
 V29__transaction_reversed_type.sql -910439317
-V30__transaction_origin.sql -840639645
-V31__employees_document_unique_employment_type_name.sql -2040834267
+V30__transaction_origin.sql 1054461556
+V31__employees_document_unique_employment_type_name.sql 682728260
 V32__reclassify_transaction_origin.sql 1426875705
 V33__transaction_payments.sql 491656518
 V34__transaction_version.sql -996457549
