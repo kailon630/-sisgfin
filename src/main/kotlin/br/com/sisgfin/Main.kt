@@ -2,6 +2,8 @@ package br.com.sisgfin
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,8 +18,7 @@ import br.com.sisgfin.api.API_PORT
 import br.com.sisgfin.api.createKtorServer
 import br.com.sisgfin.cashflow.CashFlowService
 import br.com.sisgfin.di.appModules
-import br.com.sisgfin.employees.PayrollEngine
-import br.com.sisgfin.recurrence.RecurrenceEngine
+import br.com.sisgfin.engine.EngineOrchestrator
 import br.com.sisgfin.CostCenterService
 import br.com.sisgfin.financial.categories.ExpenseCategoryService
 import br.com.sisgfin.financial.transactions.TransactionRepository
@@ -28,13 +29,37 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.core.context.startKoin
 import org.koin.java.KoinJavaComponent.getKoin
+import java.io.File
+import java.io.PrintWriter
+import java.io.StringWriter
+import java.time.LocalDateTime
 import java.time.YearMonth
 import java.util.prefs.Preferences
 
 private sealed class StartupState {
-    object Loading : StartupState()
+    object Loading    : StartupState()
     data class NeedsDbConfig(val savedConfig: DbConfig?, val errorMessage: String?) : StartupState()
-    object Ready : StartupState()
+    object Connected  : StartupState()  // conexão OK, migrações ainda não rodaram
+    data class MigrationFailed(val detail: String, val logPath: String) : StartupState()
+    object Ready      : StartupState()
+}
+
+private object StartupLogger {
+    private val logFile get() = File(System.getProperty("user.home"), ".sisgfin/startup.log")
+    val path: String get() = logFile.absolutePath
+
+    fun log(message: String) = append("[${LocalDateTime.now()}] $message")
+
+    fun logException(context: String, e: Throwable) {
+        val sw = StringWriter()
+        e.printStackTrace(PrintWriter(sw))
+        append("[${LocalDateTime.now()}] $context\n$sw")
+    }
+
+    private fun append(text: String) = runCatching {
+        logFile.parentFile.mkdirs()
+        logFile.appendText("$text\n")
+    }
 }
 
 private val prefs: Preferences = Preferences.userRoot().node("sisgfin/ui")
@@ -62,17 +87,21 @@ fun main() = application {
                     is StartupState.Loading -> {
                         DbLoadingScreen()
                         LaunchedEffect(Unit) {
+                            StartupLogger.log("Iniciando SisgFin")
                             val config = withContext(Dispatchers.IO) { DbConfigStore.load() }
                             if (config == null) {
                                 startupState = StartupState.NeedsDbConfig(null, null)
                                 return@LaunchedEffect
                             }
-                            val result = withContext(Dispatchers.IO) { DatabaseFactory.tryInit(config) }
-                            startupState = if (result.isSuccess) {
-                                StartupState.Ready
-                            } else {
-                                StartupState.NeedsDbConfig(config, result.exceptionOrNull()?.message)
+                            StartupLogger.log("Conectando a ${config.host}:${config.port}/${config.database}")
+                            val connectResult = withContext(Dispatchers.IO) { DatabaseFactory.tryConnect(config) }
+                            if (connectResult.isFailure) {
+                                val msg = connectResult.exceptionOrNull()?.message
+                                StartupLogger.log("Falha de conexão: $msg")
+                                startupState = StartupState.NeedsDbConfig(config, msg)
+                                return@LaunchedEffect
                             }
+                            startupState = StartupState.Connected
                         }
                     }
 
@@ -80,8 +109,31 @@ fun main() = application {
                         DbConfigScreen(
                             savedConfig  = state.savedConfig,
                             errorMessage = state.errorMessage,
-                            onConnected  = { startupState = StartupState.Ready }
+                            onConnected  = { startupState = StartupState.Connected }
                         )
+                    }
+
+                    is StartupState.Connected -> {
+                        DbLoadingScreen("Verificando banco de dados...")
+                        LaunchedEffect(Unit) {
+                            StartupLogger.log("Executando migrações Flyway")
+                            val migrateResult = withContext(Dispatchers.IO) { DatabaseFactory.runMigrations() }
+                            if (migrateResult.isFailure) {
+                                val e = migrateResult.exceptionOrNull()!!
+                                StartupLogger.logException("Migração falhou — sistema não iniciou", e)
+                                startupState = StartupState.MigrationFailed(
+                                    detail  = e.message ?: "Erro desconhecido",
+                                    logPath = StartupLogger.path
+                                )
+                                return@LaunchedEffect
+                            }
+                            StartupLogger.log("Migrações OK — sistema pronto")
+                            startupState = StartupState.Ready
+                        }
+                    }
+
+                    is StartupState.MigrationFailed -> {
+                        MigrationFailedScreen(detail = state.detail, logPath = state.logPath, onExit = ::exitApplication)
                     }
 
                     is StartupState.Ready -> {
@@ -167,19 +219,16 @@ fun main() = application {
 }
 
 private fun launchBackgroundEngines() {
+    val orchestrator = getKoin().get<EngineOrchestrator>()
+    val now = YearMonth.now()
+
     CoroutineScope(Dispatchers.IO).launch {
-        runCatching {
-            val payrollEngine = getKoin().get<PayrollEngine>()
-            val now = YearMonth.now()
-            payrollEngine.generateForMonth(now)
-            payrollEngine.generateForMonth(now.plusMonths(1))
-        }
+        orchestrator.runPayrollForMonth(now)
+        orchestrator.runPayrollForMonth(now.plusMonths(1))
     }
 
     CoroutineScope(Dispatchers.IO).launch {
-        runCatching {
-            getKoin().get<RecurrenceEngine>().generateAhead(monthsAhead = 2)
-        }
+        orchestrator.runRecurrence(monthsAhead = 2)
     }
 
     CoroutineScope(Dispatchers.IO).launch {
@@ -203,6 +252,66 @@ private fun launchBackgroundEngines() {
             println("Swagger UI: http://localhost:$API_PORT/swagger")
         }.onFailure { e ->
             println("Falha ao iniciar API REST: ${e.message}")
+        }
+    }
+}
+
+@Composable
+private fun MigrationFailedScreen(detail: String, logPath: String, onExit: () -> Unit) {
+    Surface(modifier = Modifier.fillMaxSize(), color = WsBackground) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(40.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text       = "Migração de banco falhou",
+                style      = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color      = WsDanger,
+                textAlign  = TextAlign.Center
+            )
+            Text(
+                text      = "O banco de dados está em versão inconsistente com o sistema. O aplicativo não pode iniciar.",
+                style     = MaterialTheme.typography.bodyMedium,
+                color     = WsTextSecondary,
+                textAlign = TextAlign.Center
+            )
+            HorizontalDivider(color = WsDanger.copy(alpha = 0.4f))
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text  = detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = WsTextPrimary
+                )
+            }
+            HorizontalDivider(color = WsBorder)
+            Text(
+                text      = "Log completo: $logPath",
+                style     = MaterialTheme.typography.labelSmall,
+                color     = WsTextDisabled,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text      = "Contate o suporte com o arquivo acima.",
+                style     = MaterialTheme.typography.labelSmall,
+                color     = WsTextDisabled,
+                textAlign = TextAlign.Center
+            )
+            Button(
+                onClick = onExit,
+                colors  = ButtonDefaults.buttonColors(containerColor = WsDanger)
+            ) {
+                Text("Fechar aplicativo")
+            }
         }
     }
 }

@@ -11,26 +11,24 @@ import java.time.LocalDateTime
 
 object DatabaseFactory {
 
-    fun tryInit(config: DbConfig): Result<Unit> = runCatching {
-        // 1. Testa a conexão antes de qualquer coisa
+    fun tryConnect(config: DbConfig): Result<Unit> = runCatching {
         DbConfigStore.testConnection(config).getOrThrow()
-
-        // 2. Conecta o Exposed
         Database.connect(
             url      = config.url,
             driver   = "org.postgresql.Driver",
             user     = config.user,
             password = config.password
         )
+    }
 
-        // 3. Executa migrações Flyway
+    fun runMigrations(): Result<Unit> = runCatching {
+        val config = DbConfigStore.load()
+            ?: error("Configuração de banco não encontrada — impossível migrar.")
         Flyway.configure()
             .dataSource(config.url, config.user, config.password)
             .locations("classpath:db/migration")
             .load()
             .migrate()
-
-        // 4. Seed inicial
         seed()
     }
 

@@ -72,7 +72,7 @@ fun DbConfigScreen(
                     if (andConnect) {
                         withContext(Dispatchers.IO) {
                             DbConfigStore.save(config)
-                            DatabaseFactory.tryInit(config)
+                            DatabaseFactory.tryConnect(config)
                         }.fold(
                             onSuccess = { onConnected() },
                             onFailure = { e -> status = ConnectionStatus.Failure(e.message ?: "Erro desconhecido") }
