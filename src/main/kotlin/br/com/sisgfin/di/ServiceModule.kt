@@ -28,6 +28,7 @@ val serviceModule = module {
     single { BudgetItemService(get(), get(), get(), get()) }
     single { CashFlowService(get(), get(), get()) }
     single { PayrollEngine(get(), get(), get(), get()) }
+    single { br.com.sisgfin.engine.EngineOrchestrator(get(), get(), get()) }
     single { br.com.sisgfin.financial.ledger.LedgerService() }
     single { br.com.sisgfin.financial.transactions.timeline.TransactionTimelineRepository() }
     single {

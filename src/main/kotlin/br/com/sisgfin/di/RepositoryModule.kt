@@ -26,4 +26,5 @@ val repositoryModule = module {
     single { ContractRepository() }
     single { ProjectRepository() }
     single { br.com.sisgfin.financial.payments.TransactionPaymentRepository() }
+    single { br.com.sisgfin.engine.EngineRunRepository() }
 }

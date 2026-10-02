@@ -4,6 +4,9 @@ import br.com.sisgfin.Employee
 import br.com.sisgfin.EmployeeService
 import br.com.sisgfin.core.crud.BaseCrudViewModel
 import br.com.sisgfin.core.crud.CrudEvent
+import br.com.sisgfin.engine.EngineOrchestrator
+import br.com.sisgfin.engine.EngineRun
+import br.com.sisgfin.engine.EngineRunStatus
 import br.com.sisgfin.financial.money.Money
 import br.com.sisgfin.financial.transactions.TransactionRepository
 import kotlinx.coroutines.Dispatchers
@@ -13,10 +16,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.time.YearMonth
 
 class EmployeeViewModel(
     private val employeeService: EmployeeService,
-    private val transactionRepository: TransactionRepository
+    private val transactionRepository: TransactionRepository,
+    private val engineOrchestrator: EngineOrchestrator
 ) : BaseCrudViewModel<Employee>(
     operations = employeeService,
     emptyFactory = {
@@ -40,9 +45,43 @@ class EmployeeViewModel(
     private val _nextPaymentDates = MutableStateFlow<Map<Int, LocalDate?>>(emptyMap())
     val nextPaymentDates: StateFlow<Map<Int, LocalDate?>> = _nextPaymentDates.asStateFlow()
 
+    private val _payrollRun = MutableStateFlow<EngineRun?>(null)
+    val payrollRun: StateFlow<EngineRun?> = _payrollRun.asStateFlow()
+
+    private val _payrollRunning = MutableStateFlow(false)
+    val payrollRunning: StateFlow<Boolean> = _payrollRunning.asStateFlow()
+
     override fun load() {
         super.load()
         loadNextPaymentDates()
+        loadPayrollStatus()
+    }
+
+    private fun loadPayrollStatus() {
+        viewModelScope.launch {
+            _payrollRun.value = withContext(Dispatchers.IO) {
+                engineOrchestrator.findLastPayrollRun(YearMonth.now())
+            }
+        }
+    }
+
+    fun runPayrollNow() {
+        if (_payrollRunning.value) return
+        _payrollRunning.value = true
+        viewModelScope.launch {
+            val run = withContext(Dispatchers.IO) {
+                engineOrchestrator.runPayrollForMonth(YearMonth.now())
+            }
+            _payrollRun.value = run
+            _payrollRunning.value = false
+            val created = run.created
+            if (created > 0) {
+                emitEvent(CrudEvent.ShowSnackbar("$created lançamento(s) criado(s) na folha do mês"))
+            }
+            if (run.status == EngineRunStatus.FAILED) {
+                emitEvent(CrudEvent.ShowSnackbar("Falha ao gerar folha: ${run.error}"))
+            }
+        }
     }
 
     override suspend fun onSaveSuccess() {
@@ -73,5 +112,9 @@ class EmployeeViewModel(
     fun selectEmployee(employee: Employee) = select(employee)
     fun saveEmployee(employee: Employee) = save(employee)
     fun toggleEmployeeActive(id: Int) = toggleActive(id)
-    fun openEmployeeDialog(employee: Employee? = null) = openDialog(employee)
+    fun openNewEmployee() = openNew()
+    fun openEmployeeDialog(employee: Employee? = null) {
+        onAction(br.com.sisgfin.core.crud.CrudAction.ClosePanel)
+        openDialog(employee)
+    }
 }

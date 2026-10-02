@@ -27,7 +27,7 @@ import org.koin.dsl.module
 val viewModelModule = module {
     factory { LoginViewModel(get()) }
     factory { DashboardViewModel(get(), get(), get(), get(), get()) }
-    factory { EmployeeViewModel(get(), get()) }
+    factory { EmployeeViewModel(get(), get(), get()) }
     factory { UserManagementViewModel(get(), get()) }
     factory { SupplierViewModel(get()) }
     factory { FinancialAccountViewModel(get()) }
